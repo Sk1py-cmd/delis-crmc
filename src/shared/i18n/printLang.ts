@@ -1,0 +1,85 @@
+"use client";
+
+import { useLocale } from "@/shared/store/locale";
+
+type Lang = "ru" | "uz" | "en";
+
+const D: Record<Lang, Record<string, string>> = {
+  ru: {
+    title: "СЧЁТ НА ОПЛАТУ",
+    invoice: "СЧЁТ",
+    supplier: "Поставщик",
+    buyer: "Покупатель",
+    items: "Товары",
+    subtotal: "Подытог",
+    vat: "НДС 12%",
+    total: "ИТОГО",
+    itemsTable: "№ | Наименование | Кол-во | Цена | Сумма",
+    thanks: "Спасибо за сотрудничество! DELIS — профессиональная химия для дома и авто",
+    payment: "Оплата",
+    qrTitle: "QR для оплаты",
+    payMethods: "Click · Payme · Uzum",
+    payNote: "При оплате укажите номер счёта",
+    manager: "Руководитель",
+    accountant: "Главный бухгалтер",
+    date: "Дата",
+    from: "от",
+    cash: "Наличные",
+    cashRegister: "Касса",
+    profit: "Прибыль",
+    bank: "Банк",
+  },
+  uz: {
+    title: "TO'LOV HISOBVARAQ",
+    invoice: "HISOB",
+    supplier: "Yetkazib beruvchi",
+    buyer: "Xaridor",
+    items: "Mahsulotlar",
+    subtotal: "Oraliq jami",
+    vat: "QQS 12%",
+    total: "JAMI",
+    itemsTable: "№ | Nomi | Miqdor | Narx | Summa",
+    thanks: "Hamkorlik uchun rahmat! DELIS — uy va avto uchun professional kimyo",
+    payment: "To'lov",
+    qrTitle: "To'lov uchun QR",
+    payMethods: "Click · Payme · Uzum",
+    payNote: "To'lovda hisob raqamini ko'rsating",
+    manager: "Rahbar",
+    accountant: "Bosh hisobchi",
+    date: "Sana",
+    from: "dan",
+    cash: "Naqd",
+    cashRegister: "Kassa",
+    profit: "Foyda",
+    bank: "Bank",
+  },
+  en: {
+    title: "INVOICE",
+    invoice: "INVOICE",
+    supplier: "Supplier",
+    buyer: "Buyer",
+    items: "Items",
+    subtotal: "Subtotal",
+    vat: "VAT 12%",
+    total: "TOTAL",
+    itemsTable: "# | Name | Qty | Price | Amount",
+    thanks: "Thank you for your business! DELIS — professional chemicals for home and auto",
+    payment: "Payment",
+    qrTitle: "Payment QR",
+    payMethods: "Click · Payme · Uzum",
+    payNote: "Please reference invoice number when paying",
+    manager: "Manager",
+    accountant: "Chief Accountant",
+    date: "Date",
+    from: "from",
+    cash: "Cash",
+    cashRegister: "Cash register",
+    profit: "Profit",
+    bank: "Bank",
+  },
+};
+
+export function usePrintLang() {
+  const { locale } = useLocale();
+  return D[locale as Lang] ?? D.ru;
+}
