@@ -1009,6 +1009,17 @@ export async function addCourier(input: { name: string; phone: string; vehicle: 
 }
 
 export async function assignDelivery(input: { orderId: number; courierId: number; address: string; city: string; notes: string; actor: string }) {
+  // Повторное назначение раньше создавало вторую доставку на тот же заказ
+  // и накручивало курьеру счётчик активных: у него числилось две посылки
+  // вместо одной.
+  const [active] = await db
+    .select({ id: s.deliveries.id })
+    .from(s.deliveries)
+    .where(and(eq(s.deliveries.orderId, input.orderId), sql`${s.deliveries.status} <> 'delivered'`))
+    .limit(1);
+
+  if (active) throw new BusinessError("По этому заказу уже назначена доставка");
+
   const [d] = await db.insert(s.deliveries).values({
     orderId: input.orderId, courierId: input.courierId,
     status: "assigned", address: input.address, city: input.city, notes: input.notes,
@@ -1023,10 +1034,34 @@ export async function assignDelivery(input: { orderId: number; courierId: number
 
 export async function completeDelivery(id: number, actor: string) {
   const [d] = await db.select().from(s.deliveries).where(eq(s.deliveries.id, id));
-  if (!d) throw new Error("Доставка не найдена");
-  await db.update(s.deliveries).set({ status: "delivered", deliveredAt: new Date() }).where(eq(s.deliveries.id, id));
+  if (!d) throw new BusinessError("Доставка не найдена");
+  if (d.status === "delivered") throw new BusinessError("Эта доставка уже завершена");
+
+  // Условный UPDATE: две одновременные попытки не смогут пройти обе и
+  // дважды засчитать курьеру одну посылку.
+  const closed = await db
+    .update(s.deliveries)
+    .set({ status: "delivered", deliveredAt: new Date() })
+    .where(and(eq(s.deliveries.id, id), sql`${s.deliveries.status} <> 'delivered'`))
+    .returning({ id: s.deliveries.id });
+
+  if (closed.length === 0) throw new BusinessError("Эта доставка уже завершена");
+
   if (d.courierId) {
-    await db.update(s.couriers).set({ activeDeliveries: sql`greatest(0, active_deliveries - 1)`, completedToday: sql`completed_today + 1`, status: "available" }).where(eq(s.couriers.id, d.courierId));
+    // Курьер свободен, только если других незакрытых доставок не осталось:
+    // раньше статус безусловно ставился available при висящих посылках.
+    const [{ n }] = await db
+      .select({ n: sql<string>`count(*)` })
+      .from(s.deliveries)
+      .where(and(eq(s.deliveries.courierId, d.courierId), sql`${s.deliveries.status} <> 'delivered'`));
+
+    const stillBusy = Number(n) > 0;
+
+    await db.update(s.couriers).set({
+      activeDeliveries: sql`greatest(0, active_deliveries - 1)`,
+      completedToday: sql`completed_today + 1`,
+      status: stillBusy ? "busy" : "available",
+    }).where(eq(s.couriers.id, d.courierId));
   }
   await db.update(s.orders).set({ status: "delivered" }).where(eq(s.orders.id, d.orderId));
   await db.insert(s.activity).values({ actor, action: "подтвердил доставку", entity: `Заказ #${d.orderId}` });
