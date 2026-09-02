@@ -6,7 +6,7 @@ import { ensureSeed } from "@/db/seed";
 import { isKnownRole } from "@/shared/config/nav";
 import { getSessionUser, canManageUsers } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
-import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners } from "@/server/queries";
+import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku } from "@/server/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
           await db.insert(s.products).values({
             name,
             slug: name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "-"),
-            sku: `DLS-${Math.floor(Math.random() * 9000 + 1000)}`,
+            sku: await nextSku(),
             price: String(num(r.price)),
             cost: String(num(r.cost)),
             stock: num(r.stock),

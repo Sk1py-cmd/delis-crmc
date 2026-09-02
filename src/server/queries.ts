@@ -3,6 +3,24 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 
+/**
+ * Номера заказов, закупок и SKU выдаются последовательностями Postgres.
+ *
+ * Раньше использовалось `префикс + count(*)`: два параллельных запроса
+ * успевали прочитать одинаковый count и создавали записи с одним номером
+ * (воспроизводилось на пяти одновременных заказах). nextval атомарен.
+ */
+async function nextNumber(seq: string, prefix: string): Promise<string> {
+  const res = await db.execute<{ v: string }>(sql`select nextval(${seq})::bigint as v`);
+  const rows = (Array.isArray(res) ? res : res.rows) as { v: string }[];
+  return `${prefix}${rows[0].v}`;
+}
+
+export const nextOrderNumber = () => nextNumber("order_number_seq", "DLS-");
+export const nextPurchaseOrderNumber = () => nextNumber("purchase_order_number_seq", "PO-");
+export const nextSku = () => nextNumber("product_sku_seq", "DLS-");
+
+
 export type Product = typeof s.products.$inferSelect;
 export type Order = typeof s.orders.$inferSelect;
 export type Customer = typeof s.customers.$inferSelect;
@@ -461,8 +479,7 @@ export async function createAgentStoreOrder(input: {
     rows.push({ productId: p.id, name: p.name, qty, price: p.price });
   }
 
-  const [cnt] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
-  const orderNumber = `DLS-${24000 + Number(cnt.c) + 1}`;
+  const orderNumber = await nextOrderNumber();
 
   const [order] = await db
     .insert(s.orders)
@@ -757,7 +774,7 @@ export async function upsertProduct(data: Partial<Product> & { id?: number }) {
     .values({
       name: rest.name ?? "Новый товар",
       slug: (rest.name ?? "new-product").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      sku: rest.sku ?? `DLS-${Math.floor(Math.random() * 9000 + 1000)}`,
+      sku: rest.sku ?? await nextSku(),
       ...rest,
     })
     .returning();
@@ -784,11 +801,11 @@ export async function adjustStock(productId: number, kind: string, qty: number, 
 export async function createOrderQuick(customerId: number, productId: number, qty: number, payment = "click") {
   const [p] = await db.select().from(s.products).where(eq(s.products.id, productId));
   const total = Number(p.price) * qty;
-  const [count] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
+  const orderNumber = await nextOrderNumber();
   const [order] = await db
     .insert(s.orders)
     .values({
-      number: `DLS-${24000 + Number(count.c) + 1}`,
+      number: orderNumber,
       customerId,
       status: "new",
       channel: "crm",
@@ -827,11 +844,11 @@ export async function createMultiOrder(customerId: number, items: { productId: n
     orderItems.push({ productId: p.id, name: p.name, qty, price: p.price });
   }
 
-  const [count] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
+  const orderNumber = await nextOrderNumber();
   const [order] = await db
     .insert(s.orders)
     .values({
-      number: `DLS-${24000 + Number(count.c) + 1}`,
+      number: orderNumber,
       customerId,
       status: "new",
       channel: "crm",
@@ -1069,7 +1086,7 @@ export async function createPurchaseOrder(input: {
   const [po] = await db
     .insert(s.purchaseOrders)
     .values({
-      number: `PO-${1200 + Number(cnt.c) + 1}`,
+      number: await nextPurchaseOrderNumber(),
       supplierId: input.supplierId,
       status: "sent",
       total: String(total),

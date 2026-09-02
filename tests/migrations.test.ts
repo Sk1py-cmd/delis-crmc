@@ -42,10 +42,17 @@ async function withDb<T>(dbName: string, fn: (c: Client) => Promise<T>): Promise
   }
 }
 
+/** Применяет все миграции по порядку из журнала, а не только первую. */
 async function applyMigrations(c: Client) {
-  const file = await readFile(path.join(MIGRATIONS, "0000_living_shaman.sql"), "utf8");
-  for (const stmt of file.split("--> statement-breakpoint")) {
-    if (stmt.trim()) await c.query(stmt);
+  const journal = JSON.parse(
+    await readFile(path.join(MIGRATIONS, "meta", "_journal.json"), "utf8"),
+  ) as { entries: { tag: string }[] };
+
+  for (const entry of journal.entries) {
+    const file = await readFile(path.join(MIGRATIONS, `${entry.tag}.sql`), "utf8");
+    for (const stmt of file.split("--> statement-breakpoint")) {
+      if (stmt.trim()) await c.query(stmt);
+    }
   }
 }
 
@@ -142,4 +149,63 @@ describe("файлы миграций", () => {
     expect(tag, "BASELINE_TAG не найден в seed.ts").toBeTruthy();
     await expect(readFile(path.join(MIGRATIONS, `${tag}.sql`), "utf8")).resolves.toBeTruthy();
   });
+});
+
+describe.skipIf(!url)("уникальность номеров", () => {
+  it("параллельные вызовы nextval дают разные номера заказов", async () => {
+    const db = `t_seq_${Date.now()}`;
+    await withAdmin((c) => c.query(`create database ${db}`));
+
+    try {
+      await withDb(db, async (c) => {
+        await applyMigrations(c);
+
+        // Прежняя схема `count(*) + 1` на таком заходе давала дубликаты.
+        const results = await Promise.all(
+          Array.from({ length: 20 }, () => c.query<{ v: string }>("select nextval('order_number_seq')::bigint as v")),
+        );
+        const numbers = results.map((r) => r.rows[0].v);
+
+        expect(new Set(numbers).size).toBe(20);
+      });
+    } finally {
+      await withAdmin((c) => c.query(`drop database if exists ${db} with (force)`));
+    }
+  }, 60_000);
+
+  it("БД не даёт вставить два заказа с одним номером", async () => {
+    const db = `t_uniq_${Date.now()}`;
+    await withAdmin((c) => c.query(`create database ${db}`));
+
+    try {
+      await withDb(db, async (c) => {
+        await applyMigrations(c);
+
+        await c.query("insert into orders (number, status) values ('DLS-1', 'new')");
+        await expect(
+          c.query("insert into orders (number, status) values ('DLS-1', 'new')"),
+        ).rejects.toThrow(/duplicate key/);
+      });
+    } finally {
+      await withAdmin((c) => c.query(`drop database if exists ${db} with (force)`));
+    }
+  }, 60_000);
+
+  it("SKU товаров тоже защищён от дубликатов", async () => {
+    const db = `t_sku_${Date.now()}`;
+    await withAdmin((c) => c.query(`create database ${db}`));
+
+    try {
+      await withDb(db, async (c) => {
+        await applyMigrations(c);
+
+        await c.query("insert into products (name, slug, sku) values ('A', 'a', 'DLS-1000')");
+        await expect(
+          c.query("insert into products (name, slug, sku) values ('B', 'b', 'DLS-1000')"),
+        ).rejects.toThrow(/duplicate key/);
+      });
+    } finally {
+      await withAdmin((c) => c.query(`drop database if exists ${db} with (force)`));
+    }
+  }, 60_000);
 });
