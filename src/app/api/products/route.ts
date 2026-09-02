@@ -20,6 +20,10 @@ interface ProductPayload {
 }
 
 export async function GET() {
+  // Каталог содержит себестоимость и остатки — только для авторизованных.
+  const auth = await getSessionUser();
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   return NextResponse.json({ products: await getProducts() });
 }
 

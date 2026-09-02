@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrderQuick, createMultiOrder } from "@/server/queries";
+import { createOrderQuick, createMultiOrder, recentOrdersList } from "@/server/queries";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/server/auth";
+
+/** Список последних заказов. Параметр `limit` — от 1 до 200. */
+export async function GET(req: NextRequest) {
+  const auth = await getSessionUser();
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const raw = Number(req.nextUrl.searchParams.get("limit") ?? 100);
+  const limit = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 1), 200) : 100;
+
+  return NextResponse.json({ orders: await recentOrdersList(limit) });
+}
 
 export async function POST(req: NextRequest) {
   const auth = await getSessionUser();
