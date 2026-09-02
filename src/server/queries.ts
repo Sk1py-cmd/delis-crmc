@@ -372,8 +372,18 @@ export async function createTask(input: {
   return t;
 }
 
+/** Колонки канбана в интерфейсе задач. */
+export const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
+
 export async function updateTaskStatus(id: number, status: string, actor: string) {
+  // Статус приходит из запроса: произвольное значение записывалось в БД,
+  // и задача пропадала из интерфейса — она не попадала ни в одну колонку.
+  if (!TASK_STATUSES.includes(status as (typeof TASK_STATUSES)[number])) {
+    throw new BusinessError(`Недопустимый статус задачи: ${status}`);
+  }
+
   const [t] = await db.update(s.tasks).set({ status }).where(eq(s.tasks.id, id)).returning();
+  if (!t) throw new BusinessError("Задача не найдена");
   if (t && status === "done") {
     await db.insert(s.activity).values({ actor, action: "выполнил задачу", entity: t.title });
   }
@@ -1294,12 +1304,42 @@ export async function createPromocode(input: {
   validUntil?: Date | null;
   actor: string;
 }) {
+  // Значения приходят из формы без ограничений: раньше проходили скидка
+  // 500% и отрицательная скидка, попадая в список и в событие для бота.
+  const type = input.discountType === "fixed" ? "fixed" : "percent";
+  const value = Number(input.discountValue);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BusinessError("Размер скидки должен быть больше нуля");
+  }
+  if (type === "percent" && value > 100) {
+    throw new BusinessError("Скидка в процентах не может превышать 100%");
+  }
+  if (!Number.isFinite(input.minOrderAmount) || input.minOrderAmount < 0) {
+    throw new BusinessError("Минимальная сумма заказа не может быть отрицательной");
+  }
+  if (!Number.isInteger(input.maxUses) || input.maxUses < 1) {
+    throw new BusinessError("Число использований должно быть не меньше одного");
+  }
+  if (input.validUntil && input.validUntil.getTime() < Date.now()) {
+    throw new BusinessError("Дата окончания уже прошла");
+  }
+
+  const code = input.code.toUpperCase().trim();
+  const [dup] = await db
+    .select({ id: s.promocodes.id })
+    .from(s.promocodes)
+    .where(eq(s.promocodes.code, code))
+    .limit(1);
+
+  if (dup) throw new BusinessError(`Промокод «${code}» уже существует`);
+
   const [promo] = await db
     .insert(s.promocodes)
     .values({
-      code: input.code.toUpperCase().trim(),
-      discountType: input.discountType,
-      discountValue: String(input.discountValue),
+      code,
+      discountType: type,
+      discountValue: String(value),
       minOrderAmount: String(input.minOrderAmount),
       maxUses: input.maxUses,
       validUntil: input.validUntil ?? null,
