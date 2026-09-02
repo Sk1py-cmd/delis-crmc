@@ -91,6 +91,55 @@ async function createTables() {
   await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 }
 
+/**
+ * Стартовые значения последовательностей: ниже них номера не опускаются
+ * даже на пустой базе, чтобы новые записи не пересекались с историческими.
+ */
+const SEQUENCE_FLOOR = {
+  order_number_seq: 24000,
+  purchase_order_number_seq: 1200,
+  product_sku_seq: 1000,
+} as const;
+
+/**
+ * Подтягивает последовательности номеров к фактическому содержимому таблиц.
+ *
+ * Миграция `0001_unique_numbers` выставляет `setval` в момент применения,
+ * то есть на ещё пустой базе. Демо-данные заливаются уже после неё и занимают
+ * номера `DLS-24000…24067`, `PO-1200…1267`, `DLS-1000…1015` — последовательности
+ * остаются позади, и первый же реальный заказ падает на уникальном индексе
+ * (`duplicate key value violates unique constraint "orders_number_unique"`).
+ *
+ * Поэтому после любой массовой правки данных (сид, сброс демо) двигаем
+ * счётчики за максимум уже занятых номеров.
+ *
+ * Берём первую группу цифр: у разведённых дубликатов номер выглядит как
+ * `DLS-24001-5`, и «все цифры подряд» дали бы 240015 — скачок на порядок.
+ */
+export async function syncNumberSequences() {
+  const targets: [keyof typeof SEQUENCE_FLOOR, string, string][] = [
+    ["order_number_seq", "orders", "number"],
+    ["purchase_order_number_seq", "purchase_orders", "number"],
+    ["product_sku_seq", "products", "sku"],
+  ];
+
+  for (const [seq, table, column] of targets) {
+    await db.execute(sql`
+      select setval(
+        ${seq},
+        greatest(
+          ${SEQUENCE_FLOOR[seq]},
+          coalesce(
+            (select max((regexp_match(${sql.raw(column)}, '(\\d+)'))[1]::bigint)
+               from ${sql.raw(table)}),
+            0
+          )
+        )
+      )
+    `);
+  }
+}
+
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || "delis2026";
 
 async function ensureAdmin() {
@@ -204,7 +253,12 @@ async function run() {
   // ниже при первичном сиде, поэтому логины проставляются в обоих случаях.
   await ensureDemoStaff();
   const existing = await db.execute<{ count: string }>(sql`select count(*)::text as count from products`);
-  if (Number(existing.rows[0]?.count ?? "0") > 0) return;
+  if (Number(existing.rows[0]?.count ?? "0") > 0) {
+    // База уже наполнена — счётчики могли отстать от данных, залитых
+    // предыдущей версией сида.
+    await syncNumberSequences();
+    return;
+  }
 
   const cats = await db.insert(s.categories).values(CATEGORIES).returning();
 
@@ -582,6 +636,10 @@ const prodRows = PRODUCTS.map(([name, catIdx, icon, price, cost, volume], i) => 
     { title: "Достижение статуса VIP", eventKey: "vip_threshold", actionType: "bonus_points", messageBody: "🎉 Поздравляем! Вы стали VIP-клиентом DELIS. Вам начислено 50 000 бонусных баллов и постоянная скидка 15%.", discountBonus: 50000, isActive: true, triggeredCount: 24 },
     { title: "День рождения клиента", eventKey: "birthday", actionType: "discount_message", messageBody: "🎂 С Днём рождения от команды DELIS! Дарим вам персональный подарок к заказу и бесплатную доставку.", discountBonus: 15, isActive: true, triggeredCount: 41 },
   ]);
+
+  // Демо-данные заняли номера — двигаем счётчики за их максимум, иначе
+  // первый же настоящий заказ/закупка/товар упрётся в уникальный индекс.
+  await syncNumberSequences();
 }
 
 export function ensureSeed() {

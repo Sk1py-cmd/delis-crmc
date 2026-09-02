@@ -505,10 +505,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Неизвестное действие: ${body.action}` }, { status: 400 });
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Ошибка сервера";
     // Нарушение бизнес-правила (например, нехватка товара) — это 400:
     // клиент показывает текст пользователю, а не «ошибку сервера».
-    const status = e instanceof BusinessError ? 400 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    if (e instanceof BusinessError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+
+    // Всё остальное наружу не пересказываем: drizzle кладёт в message текст
+    // SQL-запроса вместе со значениями параметров, и он утекал клиенту.
+    console.error(`manage:${body.action}`, e);
+    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
   }
 }

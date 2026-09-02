@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { ensureSeed } from "@/db/seed";
+import { ensureSeed, syncNumberSequences } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 
 
@@ -1628,6 +1628,9 @@ export async function resetDemoData(actor: string, keepSettings = true) {
   if (!keepSettings) {
     await db.execute(sql`update integrations set enabled = false, credentials = '{}'::jsonb, status = 'not_configured'`);
   }
+  // Таблицы очищены — возвращаем счётчики номеров к стартовым значениям,
+  // иначе они продолжали бы расти относительно уже несуществующих заказов.
+  await syncNumberSequences();
   await db.insert(s.activity).values({ actor, action: "очистил демо-данные системы", entity: "Полный сброс операций" });
   return { ok: true };
 }

@@ -46,6 +46,7 @@ npm run dev
 | `DEMO_PASSWORD` | нет | Пароль демо-сотрудников (по умолч. `delis2026`) |
 | `UPLOAD_DIR`     | нет         | Каталог загрузок (по умолч. `public/uploads`)          |
 | `UPLOAD_PUBLIC_PREFIX` | нет   | Публичный префикс URL файлов (по умолч. `/uploads`)    |
+| `TRUST_PROXY`    | нет         | `1`, если приложение за прокси, перезаписывающим `x-forwarded-for` |
 
 ## Скрипты
 
