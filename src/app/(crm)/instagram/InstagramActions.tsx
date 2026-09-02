@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Send, Calendar, ExternalLink } from "lucide-react";
 import { Modal } from "@/shared/ui/kit";
 import { MediaUploader, type MediaFile } from "@/shared/ui/MediaUploader";
+import { SmartImage } from "@/shared/ui/SmartImage";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
 
@@ -99,7 +100,9 @@ export function InstagramActions() {
                   {media[0].kind === "video" ? (
                     <video src={media[0].url} className="w-full aspect-square object-cover" muted controls />
                   ) : (
-                    <img src={media[0].url} alt="" className="w-full aspect-square object-cover" />
+                    <div className="relative w-full aspect-square">
+                      <SmartImage src={media[0].url} alt="Превью публикации" fill sizes="280px" className="object-cover" />
+                    </div>
                   )}
                   <div className="p-3 text-xs text-white whitespace-pre-line line-clamp-4">
                     <b>delis.uz</b> {form.caption}

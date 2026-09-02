@@ -5,6 +5,10 @@ import { getSessionUser } from "@/server/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // Переписка с клиентами — не публичные данные.
+  const auth = await getSessionUser();
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const id = Number(req.nextUrl.searchParams.get("customerId") ?? 0);
   if (!id) return NextResponse.json({ messages: [] });
   const messages = await getMessages(id);

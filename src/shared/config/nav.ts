@@ -47,17 +47,30 @@ export const ROLE_ACCESS: Record<string, string[]> = {
   operator: ["/", "/tasks", "/knowledge", "/orders", "/customers", "/chat", "/delivery", "/settings"],
 };
 
+/** Роли с полным доступом ко всем разделам. */
+const FULL_ACCESS_ROLES = new Set(["owner", "admin"]);
+
+/** Разделы для роли, которой нет в ROLE_ACCESS (fail-closed). */
+const FALLBACK_ACCESS = ["/", "/settings"];
+
+/** Все роли, которые система считает валидными. */
+export const KNOWN_ROLES = [...FULL_ACCESS_ROLES, ...Object.keys(ROLE_ACCESS)];
+
+export function isKnownRole(role: string): boolean {
+  return KNOWN_ROLES.includes(role);
+}
+
 export function navForRole(role: string): NavItem[] {
-  if (role === "owner" || role === "admin") return NAV;
-  const allowed = ROLE_ACCESS[role];
-  if (!allowed) return NAV;
+  if (FULL_ACCESS_ROLES.has(role)) return NAV;
+  // Неизвестная роль получает минимум, а не всё меню: иначе опечатка
+  // или подделанное значение открывали бы доступ к финансам.
+  const allowed = ROLE_ACCESS[role] ?? FALLBACK_ACCESS;
   return NAV.filter((n) => allowed.includes(n.href));
 }
 
 export function canAccess(role: string, href: string): boolean {
-  if (role === "owner" || role === "admin") return true;
-  const allowed = ROLE_ACCESS[role];
-  if (!allowed) return true;
+  if (FULL_ACCESS_ROLES.has(role)) return true;
+  const allowed = ROLE_ACCESS[role] ?? FALLBACK_ACCESS;
   return allowed.includes(href);
 }
 

@@ -130,7 +130,10 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     localStorage.removeItem("delis_token");
-    window.location.assign("/");
+    // Без refresh() в кеше роутера остались бы страницы предыдущего
+    // пользователя — после выхода их не должно быть видно.
+    router.replace("/");
+    router.refresh();
   };
 
   return (

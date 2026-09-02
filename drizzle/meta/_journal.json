@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788339738333,
+      "tag": "0000_living_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788339738334,
+      "tag": "0001_unique_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788349963701,
+      "tag": "0002_natural_starjammers",
+      "breakpoints": true
+    }
+  ]
+}

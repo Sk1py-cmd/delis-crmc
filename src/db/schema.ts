@@ -390,3 +390,14 @@ export const marketingTriggers = pgTable("marketing_triggers", {
   triggeredCount: integer("triggered_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+/**
+ * Счётчик неудачных попыток входа для ограничения перебора паролей.
+ * Ключ — «логин|IP», см. src/server/rate-limit.ts.
+ */
+export const loginAttempts = pgTable("login_attempts", {
+  key: text("key").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  firstAttemptAt: timestamp("first_attempt_at").notNull().defaultNow(),
+  lastAttemptAt: timestamp("last_attempt_at").notNull().defaultNow(),
+});

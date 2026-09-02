@@ -3,6 +3,33 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 
+
+/** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
+export class BusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BusinessError";
+  }
+}
+
+/**
+ * Номера заказов, закупок и SKU выдаются последовательностями Postgres.
+ *
+ * Раньше использовалось `префикс + count(*)`: два параллельных запроса
+ * успевали прочитать одинаковый count и создавали записи с одним номером
+ * (воспроизводилось на пяти одновременных заказах). nextval атомарен.
+ */
+async function nextNumber(seq: string, prefix: string): Promise<string> {
+  const res = await db.execute<{ v: string }>(sql`select nextval(${seq})::bigint as v`);
+  const rows = (Array.isArray(res) ? res : res.rows) as { v: string }[];
+  return `${prefix}${rows[0].v}`;
+}
+
+export const nextOrderNumber = () => nextNumber("order_number_seq", "DLS-");
+export const nextPurchaseOrderNumber = () => nextNumber("purchase_order_number_seq", "PO-");
+export const nextSku = () => nextNumber("product_sku_seq", "DLS-");
+
+
 export type Product = typeof s.products.$inferSelect;
 export type Order = typeof s.orders.$inferSelect;
 export type Customer = typeof s.customers.$inferSelect;
@@ -345,8 +372,18 @@ export async function createTask(input: {
   return t;
 }
 
+/** Колонки канбана в интерфейсе задач. */
+export const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
+
 export async function updateTaskStatus(id: number, status: string, actor: string) {
+  // Статус приходит из запроса: произвольное значение записывалось в БД,
+  // и задача пропадала из интерфейса — она не попадала ни в одну колонку.
+  if (!TASK_STATUSES.includes(status as (typeof TASK_STATUSES)[number])) {
+    throw new BusinessError(`Недопустимый статус задачи: ${status}`);
+  }
+
   const [t] = await db.update(s.tasks).set({ status }).where(eq(s.tasks.id, id)).returning();
+  if (!t) throw new BusinessError("Задача не найдена");
   if (t && status === "done") {
     await db.insert(s.activity).values({ actor, action: "выполнил задачу", entity: t.title });
   }
@@ -461,8 +498,7 @@ export async function createAgentStoreOrder(input: {
     rows.push({ productId: p.id, name: p.name, qty, price: p.price });
   }
 
-  const [cnt] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
-  const orderNumber = `DLS-${24000 + Number(cnt.c) + 1}`;
+  const orderNumber = await nextOrderNumber();
 
   const [order] = await db
     .insert(s.orders)
@@ -757,7 +793,7 @@ export async function upsertProduct(data: Partial<Product> & { id?: number }) {
     .values({
       name: rest.name ?? "Новый товар",
       slug: (rest.name ?? "new-product").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      sku: rest.sku ?? `DLS-${Math.floor(Math.random() * 9000 + 1000)}`,
+      sku: rest.sku ?? await nextSku(),
       ...rest,
     })
     .returning();
@@ -772,6 +808,17 @@ export async function deleteProduct(id: number) {
 
 export async function adjustStock(productId: number, kind: string, qty: number, note: string) {
   const delta = kind === "in" ? qty : -qty;
+  // greatest(0, ...) оставлен намеренно: он защищает от отрицательного
+  // остатка при ручных корректировках склада. Но списать больше, чем есть,
+  // теперь нельзя — иначе движение склада расходилось бы с остатком.
+  if (delta < 0) {
+    const [p] = await db.select({ stock: s.products.stock, name: s.products.name })
+      .from(s.products).where(eq(s.products.id, productId));
+    if (!p) throw new BusinessError("Товар не найден");
+    if (p.stock < qty) {
+      throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+    }
+  }
   await db
     .update(s.products)
     .set({ stock: sql`greatest(0, stock + ${delta})` })
@@ -783,12 +830,19 @@ export async function adjustStock(productId: number, kind: string, qty: number, 
 
 export async function createOrderQuick(customerId: number, productId: number, qty: number, payment = "click") {
   const [p] = await db.select().from(s.products).where(eq(s.products.id, productId));
+  // Раньше отсутствующий товар падал с TypeError (500), а заказ на объём
+  // больше остатка проходил: adjustStock прятал минус через greatest(0,...),
+  // из-за чего склад обнулялся, а в выручку попадала невыполнимая сумма.
+  if (!p) throw new BusinessError("Товар не найден");
+  if (p.stock < qty) {
+    throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+  }
   const total = Number(p.price) * qty;
-  const [count] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
+  const orderNumber = await nextOrderNumber();
   const [order] = await db
     .insert(s.orders)
     .values({
-      number: `DLS-${24000 + Number(count.c) + 1}`,
+      number: orderNumber,
       customerId,
       status: "new",
       channel: "crm",
@@ -822,16 +876,19 @@ export async function createMultiOrder(customerId: number, items: { productId: n
     const p = prodMap.get(it.productId);
     if (!p) continue;
     const qty = Math.max(1, it.qty);
+    if (p.stock < qty) {
+      throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+    }
     total += Number(p.price) * qty;
     costTotal += Number(p.cost) * qty;
     orderItems.push({ productId: p.id, name: p.name, qty, price: p.price });
   }
 
-  const [count] = await db.select({ c: sql<string>`count(*)` }).from(s.orders);
+  const orderNumber = await nextOrderNumber();
   const [order] = await db
     .insert(s.orders)
     .values({
-      number: `DLS-${24000 + Number(count.c) + 1}`,
+      number: orderNumber,
       customerId,
       status: "new",
       channel: "crm",
@@ -900,8 +957,24 @@ export async function createReturn(input: { orderId: number; reason: string; not
 
 export async function approveReturn(id: number, restock: boolean, actor: string) {
   const [ret] = await db.select().from(s.returns).where(eq(s.returns.id, id));
-  if (!ret) throw new Error("Возврат не найден");
-  await db.update(s.returns).set({ status: "refunded", restockItems: restock }).where(eq(s.returns.id, id));
+  if (!ret) throw new BusinessError("Возврат не найден");
+  // Повторное одобрение раньше проходило молча: деньги возвращались клиенту
+  // дважды, а товар дважды зачислялся на склад. Статус меняем условно и
+  // проверяем, что обновилась именно эта строка — так две одновременные
+  // попытки не смогут обе пройти дальше.
+  if (ret.status === "refunded") {
+    throw new BusinessError("Возврат уже одобрен");
+  }
+
+  const updated = await db
+    .update(s.returns)
+    .set({ status: "refunded", restockItems: restock })
+    .where(and(eq(s.returns.id, id), sql`${s.returns.status} <> 'refunded'`))
+    .returning({ id: s.returns.id });
+
+  if (updated.length === 0) {
+    throw new BusinessError("Возврат уже одобрен");
+  }
   if (restock) {
     const items = await db.select().from(s.orderItems).where(eq(s.orderItems.orderId, ret.orderId));
     for (const it of items) {
@@ -946,6 +1019,17 @@ export async function addCourier(input: { name: string; phone: string; vehicle: 
 }
 
 export async function assignDelivery(input: { orderId: number; courierId: number; address: string; city: string; notes: string; actor: string }) {
+  // Повторное назначение раньше создавало вторую доставку на тот же заказ
+  // и накручивало курьеру счётчик активных: у него числилось две посылки
+  // вместо одной.
+  const [active] = await db
+    .select({ id: s.deliveries.id })
+    .from(s.deliveries)
+    .where(and(eq(s.deliveries.orderId, input.orderId), sql`${s.deliveries.status} <> 'delivered'`))
+    .limit(1);
+
+  if (active) throw new BusinessError("По этому заказу уже назначена доставка");
+
   const [d] = await db.insert(s.deliveries).values({
     orderId: input.orderId, courierId: input.courierId,
     status: "assigned", address: input.address, city: input.city, notes: input.notes,
@@ -960,10 +1044,34 @@ export async function assignDelivery(input: { orderId: number; courierId: number
 
 export async function completeDelivery(id: number, actor: string) {
   const [d] = await db.select().from(s.deliveries).where(eq(s.deliveries.id, id));
-  if (!d) throw new Error("Доставка не найдена");
-  await db.update(s.deliveries).set({ status: "delivered", deliveredAt: new Date() }).where(eq(s.deliveries.id, id));
+  if (!d) throw new BusinessError("Доставка не найдена");
+  if (d.status === "delivered") throw new BusinessError("Эта доставка уже завершена");
+
+  // Условный UPDATE: две одновременные попытки не смогут пройти обе и
+  // дважды засчитать курьеру одну посылку.
+  const closed = await db
+    .update(s.deliveries)
+    .set({ status: "delivered", deliveredAt: new Date() })
+    .where(and(eq(s.deliveries.id, id), sql`${s.deliveries.status} <> 'delivered'`))
+    .returning({ id: s.deliveries.id });
+
+  if (closed.length === 0) throw new BusinessError("Эта доставка уже завершена");
+
   if (d.courierId) {
-    await db.update(s.couriers).set({ activeDeliveries: sql`greatest(0, active_deliveries - 1)`, completedToday: sql`completed_today + 1`, status: "available" }).where(eq(s.couriers.id, d.courierId));
+    // Курьер свободен, только если других незакрытых доставок не осталось:
+    // раньше статус безусловно ставился available при висящих посылках.
+    const [{ n }] = await db
+      .select({ n: sql<string>`count(*)` })
+      .from(s.deliveries)
+      .where(and(eq(s.deliveries.courierId, d.courierId), sql`${s.deliveries.status} <> 'delivered'`));
+
+    const stillBusy = Number(n) > 0;
+
+    await db.update(s.couriers).set({
+      activeDeliveries: sql`greatest(0, active_deliveries - 1)`,
+      completedToday: sql`completed_today + 1`,
+      status: stillBusy ? "busy" : "available",
+    }).where(eq(s.couriers.id, d.courierId));
   }
   await db.update(s.orders).set({ status: "delivered" }).where(eq(s.orders.id, d.orderId));
   await db.insert(s.activity).values({ actor, action: "подтвердил доставку", entity: `Заказ #${d.orderId}` });
@@ -1069,7 +1177,7 @@ export async function createPurchaseOrder(input: {
   const [po] = await db
     .insert(s.purchaseOrders)
     .values({
-      number: `PO-${1200 + Number(cnt.c) + 1}`,
+      number: await nextPurchaseOrderNumber(),
       supplierId: input.supplierId,
       status: "sent",
       total: String(total),
@@ -1101,8 +1209,8 @@ export async function createPurchaseOrder(input: {
 
 export async function receivePurchaseOrder(id: number, actor: string) {
   const [po] = await db.select().from(s.purchaseOrders).where(eq(s.purchaseOrders.id, id));
-  if (!po) throw new Error("Закупка не найдена");
-  if (po.status === "received") throw new Error("Эта партия уже принята на склад");
+  if (!po) throw new BusinessError("Закупка не найдена");
+  if (po.status === "received") throw new BusinessError("Эта партия уже принята на склад");
 
   const items = await db.select().from(s.purchaseItems).where(eq(s.purchaseItems.purchaseOrderId, id));
 
@@ -1196,12 +1304,42 @@ export async function createPromocode(input: {
   validUntil?: Date | null;
   actor: string;
 }) {
+  // Значения приходят из формы без ограничений: раньше проходили скидка
+  // 500% и отрицательная скидка, попадая в список и в событие для бота.
+  const type = input.discountType === "fixed" ? "fixed" : "percent";
+  const value = Number(input.discountValue);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BusinessError("Размер скидки должен быть больше нуля");
+  }
+  if (type === "percent" && value > 100) {
+    throw new BusinessError("Скидка в процентах не может превышать 100%");
+  }
+  if (!Number.isFinite(input.minOrderAmount) || input.minOrderAmount < 0) {
+    throw new BusinessError("Минимальная сумма заказа не может быть отрицательной");
+  }
+  if (!Number.isInteger(input.maxUses) || input.maxUses < 1) {
+    throw new BusinessError("Число использований должно быть не меньше одного");
+  }
+  if (input.validUntil && input.validUntil.getTime() < Date.now()) {
+    throw new BusinessError("Дата окончания уже прошла");
+  }
+
+  const code = input.code.toUpperCase().trim();
+  const [dup] = await db
+    .select({ id: s.promocodes.id })
+    .from(s.promocodes)
+    .where(eq(s.promocodes.code, code))
+    .limit(1);
+
+  if (dup) throw new BusinessError(`Промокод «${code}» уже существует`);
+
   const [promo] = await db
     .insert(s.promocodes)
     .values({
-      code: input.code.toUpperCase().trim(),
-      discountType: input.discountType,
-      discountValue: String(input.discountValue),
+      code,
+      discountType: type,
+      discountValue: String(value),
       minOrderAmount: String(input.minOrderAmount),
       maxUses: input.maxUses,
       validUntil: input.validUntil ?? null,

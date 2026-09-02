@@ -33,7 +33,7 @@ export function PnLClient({ byCategory, byChannel, byMonth, expenses, topProduct
   const grossMargin = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
   const netMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
 
-  const exportReport = () => {
+  const exportReport = async () => {
     const headers = ["Показатель", "Сумма (сум)", "% от выручки"];
     const rows: (string | number)[][] = [
       ["Выручка (Revenue)", revenue, "100%"],
@@ -52,7 +52,11 @@ export function PnLClient({ byCategory, byChannel, byMonth, expenses, topProduct
       ["ПО КАТЕГОРИЯМ", "", ""],
       ...byCategory.map((c) => [c.category, c.revenue - c.cost, `${(((c.revenue - c.cost) / Math.max(c.revenue, 1)) * 100).toFixed(1)}%`]),
     ];
-    exportXLSX(headers, rows, `delis-pnl-${new Date().toISOString().slice(0, 10)}`);
+    try {
+      await exportXLSX(headers, rows, `delis-pnl-${new Date().toISOString().slice(0, 10)}`);
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
     toast("P&L отчёт выгружен в Excel");
   };
 

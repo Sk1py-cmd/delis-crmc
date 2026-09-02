@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrderQuick, createMultiOrder } from "@/server/queries";
+import { createOrderQuick, createMultiOrder, recentOrdersList, BusinessError } from "@/server/queries";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/server/auth";
+
+/** Список последних заказов. Параметр `limit` — от 1 до 200. */
+export async function GET(req: NextRequest) {
+  const auth = await getSessionUser();
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const raw = Number(req.nextUrl.searchParams.get("limit") ?? 100);
+  const limit = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 1), 200) : 100;
+
+  return NextResponse.json({ orders: await recentOrdersList(limit) });
+}
 
 export async function POST(req: NextRequest) {
   const auth = await getSessionUser();
@@ -9,14 +20,23 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as { customerId: number; productId?: number; qty?: number; payment?: string; items?: { productId: number; qty: number }[] };
   if (!body.customerId) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
-  if (Array.isArray(body.items) && body.items.length > 0) {
-    const order = await createMultiOrder(body.customerId, body.items);
-    revalidatePath("/orders");
-    return NextResponse.json({ order });
+  if (!Array.isArray(body.items) && !body.productId) {
+    return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
 
-  if (!body.productId) return NextResponse.json({ error: "invalid" }, { status: 400 });
-  const order = await createOrderQuick(body.customerId, body.productId, Math.max(1, body.qty || 1), body.payment || "click");
-  revalidatePath("/orders");
-  return NextResponse.json({ order });
+  try {
+    const order =
+      Array.isArray(body.items) && body.items.length > 0
+        ? await createMultiOrder(body.customerId, body.items)
+        : await createOrderQuick(body.customerId, body.productId!, Math.max(1, body.qty || 1), body.payment || "click");
+
+    revalidatePath("/orders");
+    return NextResponse.json({ order });
+  } catch (e) {
+    // Нехватка товара — ошибка пользователя, а не сбой сервера.
+    if (e instanceof BusinessError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    throw e;
+  }
 }

@@ -24,6 +24,7 @@ import { exportXLSX } from "@/shared/lib/excel";
 import { ImageUploader } from "@/shared/ui/ImageUploader";
 import { ProductThumb } from "@/shared/ui/ProductThumb";
 import { AgentMap, type VisitMarker } from "./AgentMap";
+import { SmartImage } from "@/shared/ui/SmartImage";
 import { AgentChat } from "./AgentChat";
 import { AgentCompare } from "./AgentCompare";
 import { AgentPush } from "./AgentPush";
@@ -209,7 +210,7 @@ export function AgentsClient({
     { label: "Визитов и точек", value: String(visits.length + agents.reduce((a, x) => a + x.visits, 0)), color: "#14b8a6", icon: "📍" },
   ];
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const headers = ["Имя", "Телефон", "Telegram", "Email", "Регион", "Маршрут", "План", "Факт", "Выполнение %", "Комиссия %", "Визитов"];
     const rows = agents.map((a) => [
       a.name,
@@ -224,8 +225,12 @@ export function AgentsClient({
       String(a.commission),
       String(a.visits),
     ]);
-    exportXLSX(headers, rows, `delis-agents-${new Date().toISOString().slice(0, 10)}`);
-    toast("Отчёт по агентам выгружен в XLSX");
+    try {
+      await exportXLSX(headers, rows, `delis-agents-${new Date().toISOString().slice(0, 10)}`);
+      toast("Отчёт по агентам выгружен в XLSX");
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   const orderFormTotal = orderForm.items.reduce((acc, i) => {
@@ -470,14 +475,15 @@ export function AgentsClient({
                             <button
                               key={idx}
                               onClick={() => setSelectedVisitPhotos(v.photos)}
-                              className="rounded-xl overflow-hidden border transition-transform hover:scale-105"
+                              className="relative rounded-xl overflow-hidden border transition-transform hover:scale-105"
                               style={{ width: 56, height: 56, borderColor: "rgba(var(--border))" }}
                             >
-                              <img
+                              <SmartImage
                                 src={imgUrl}
                                 alt="Фотоотчёт"
-                                className="w-full h-full object-cover"
-                                loading="lazy"
+                                fill
+                                sizes="56px"
+                                className="object-cover"
                               />
                             </button>
                           ))}
@@ -853,7 +859,14 @@ export function AgentsClient({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
             {selectedVisitPhotos.map((imgUrl, i) => (
               <div key={i} className="rounded-2xl overflow-hidden border" style={{ borderColor: "rgba(var(--border))" }}>
-                <img src={imgUrl} alt={`Фотоотчёт ${i + 1}`} className="w-full h-auto object-cover" />
+                <SmartImage
+                  src={imgUrl}
+                  alt={`Фотоотчёт ${i + 1}`}
+                  width={800}
+                  height={600}
+                  sizes="(max-width: 640px) 100vw, 50vw"
+                  className="w-full h-auto object-cover"
+                />
               </div>
             ))}
           </div>

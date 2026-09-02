@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Card, PageHeader, Badge, Tabs, Modal, Progress, Avatar } from "@/shared/ui/kit";
 import { money, compact, dt, dateOnly, num } from "@/shared/lib/format";
+import { useNow } from "@/shared/lib/useNow";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
 import { exportXLSX } from "@/shared/lib/excel";
@@ -113,6 +114,7 @@ export function SuppliersClient({
   const toast = useToast();
   const tr = useT();
   const router = useRouter();
+  const now = useNow();
 
   const filtered = useMemo(
     () =>
@@ -191,7 +193,7 @@ export function SuppliersClient({
     }
   };
 
-  const exportSuppliers = () => {
+  const exportSuppliers = async () => {
     const headers = ["Поставщик", "Контакт", "Телефон", "Email", "Город", "Категория", "Рейтинг", "Срок поставки (дн)", "Закуплено на сумму"];
     const rows = filtered.map((s) => [
       s.name,
@@ -204,8 +206,12 @@ export function SuppliersClient({
       String(s.leadTimeDays),
       s.totalPurchased,
     ]);
-    exportXLSX(headers, rows, `delis-suppliers-${new Date().toISOString().slice(0, 10)}`);
-    toast("Список поставщиков выгружен в XLSX");
+    try {
+      await exportXLSX(headers, rows, `delis-suppliers-${new Date().toISOString().slice(0, 10)}`);
+      toast("Список поставщиков выгружен в XLSX");
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   return (
@@ -389,7 +395,7 @@ export function SuppliersClient({
                 {orders.map((o) => {
                   const st = PO_STATUS[o.status] ?? PO_STATUS.draft;
                   const isLate =
-                    o.expectedAt && !o.receivedAt && new Date(o.expectedAt).getTime() < Date.now();
+                    now > 0 && !!o.expectedAt && !o.receivedAt && new Date(o.expectedAt).getTime() < now;
                   return (
                     <tr key={o.id}>
                       <td className="font-semibold">{o.number}</td>

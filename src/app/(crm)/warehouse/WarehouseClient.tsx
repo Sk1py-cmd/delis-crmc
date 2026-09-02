@@ -48,7 +48,7 @@ export function WarehouseClient({ products, moves }: { products: ProductRow[]; m
     setInv(true);
   };
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const headers = ["SKU", "Название", "Категория", "Объём", "Цена", "Себестоимость", "Остаток", "Порог низкого остатка", "Статус", "Продано"];
     const rows = products.map((p) => [
       p.sku,
@@ -62,8 +62,12 @@ export function WarehouseClient({ products, moves }: { products: ProductRow[]; m
       p.stock < p.lowStock ? "Низкий остаток" : "В норме",
       String(p.sold),
     ]);
-    exportXLSX(headers, rows, `delis-warehouse-${new Date().toISOString().slice(0, 10)}`);
-    toast("Отчёт по складу выгружен в XLSX");
+    try {
+      await exportXLSX(headers, rows, `delis-warehouse-${new Date().toISOString().slice(0, 10)}`);
+      toast("Отчёт по складу выгружен в XLSX");
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   const applyInventory = async () => {

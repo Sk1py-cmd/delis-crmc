@@ -1,50 +1,97 @@
+import path from "node:path";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { hashPassword } from "@/server/password";
 
+const MIGRATIONS_DIR = path.join(process.cwd(), "drizzle");
+
 let seeded: Promise<void> | null = null;
 
-const DDL = `
-create table if not exists categories (id serial primary key, name text not null, slug text not null, kind text not null default 'home', icon text not null default '🧴', created_at timestamp not null default now());
-create table if not exists products (id serial primary key, name text not null, slug text not null, sku text not null, barcode text not null default '', category_id integer, description text not null default '', brand text not null default 'DELIS', country text not null default 'Uzbekistan', volume text not null default '1 L', weight numeric not null default 1, price numeric not null default 0, cost numeric not null default 0, vat integer not null default 12, discount integer not null default 0, stock integer not null default 0, low_stock integer not null default 20, image text not null default '', images jsonb not null default '[]'::jsonb, color text not null default '#8b5cf6', is_popular boolean not null default false, is_new boolean not null default false, is_featured boolean not null default false, status text not null default 'active', sold integer not null default 0, created_at timestamp not null default now());
-create table if not exists customers (id serial primary key, first_name text not null, last_name text not null default '', username text not null default '', telegram_id text not null default '', phone text not null default '', email text not null default '', city text not null default 'Tashkent', region text not null default 'Toshkent', address text not null default '', language text not null default 'ru', source text not null default 'telegram', is_vip boolean not null default false, bonus integer not null default 0, tags jsonb not null default '[]'::jsonb, notes text not null default '', orders_count integer not null default 0, total_spent numeric not null default 0, last_active_at timestamp not null default now(), created_at timestamp not null default now());
-create table if not exists orders (id serial primary key, number text not null, customer_id integer, agent_id integer, status text not null default 'new', channel text not null default 'miniapp', payment text not null default 'click', total numeric not null default 0, profit numeric not null default 0, comment text not null default '', timeline jsonb not null default '[]'::jsonb, created_at timestamp not null default now());
-create table if not exists order_items (id serial primary key, order_id integer not null, product_id integer not null, name text not null, qty integer not null default 1, price numeric not null default 0);
-create table if not exists agents (id serial primary key, name text not null, phone text not null default '', telegram text not null default '', email text not null default '', region text not null default 'Toshkent', route text not null default '', plan numeric not null default 0, fact numeric not null default 0, commission integer not null default 7, visits integer not null default 0, status text not null default 'active', avatar_color text not null default '#8b5cf6');
-create table if not exists transactions (id serial primary key, kind text not null, category text not null default 'sales', account text not null default 'click', amount numeric not null default 0, note text not null default '', created_at timestamp not null default now());
-create table if not exists messages (id serial primary key, customer_id integer not null, body text not null, from_admin boolean not null default false, kind text not null default 'text', read_at timestamp, created_at timestamp not null default now());
-create table if not exists templates (id serial primary key, title text not null, body text not null);
-create table if not exists stock_moves (id serial primary key, product_id integer not null, kind text not null, qty integer not null default 0, note text not null default '', created_at timestamp not null default now());
-create table if not exists users (id serial primary key, name text not null, email text not null, role text not null default 'manager', status text not null default 'active', last_ip text not null default '94.158.0.1', device text not null default 'MacBook Pro · Chrome', two_fa boolean not null default false, last_login_at timestamp not null default now());
-create table if not exists activity (id serial primary key, actor text not null, action text not null, entity text not null default '', created_at timestamp not null default now());
-create table if not exists content_blocks (id serial primary key, surface text not null, "key" text not null, title text not null, body text not null default '', enabled boolean not null default true, updated_at timestamp not null default now());
-create table if not exists sessions (id serial primary key, token text not null unique, user_id integer not null, device text not null default '', expires_at timestamp not null, created_at timestamp not null default now());
-alter table users add column if not exists password_hash text not null default '';
-alter table users add column if not exists login text not null default '';
-create table if not exists sync_events (id serial primary key, source text not null default 'crm', target text not null default 'all', entity text not null, action text not null, status text not null default 'synced', payload jsonb not null default '{}'::jsonb, created_at timestamp not null default now());
-create table if not exists broadcasts (id serial primary key, title text not null default '', body text not null default '', recipients integer not null default 0, channel text not null default 'telegram', status text not null default 'sent', scheduled_at timestamp, sent_at timestamp not null default now(), created_by text not null default '', created_at timestamp not null default now());
-create table if not exists campaigns (id serial primary key, title text not null default '', body text not null, channel text not null default 'telegram', attachments jsonb not null default '[]'::jsonb, segment jsonb not null default '{}'::jsonb, recipients integer not null default 0, delivered integer not null default 0, status text not null default 'sent', scheduled_at timestamp, created_at timestamp not null default now());
-create table if not exists promocodes (id serial primary key, code text not null unique, discount_type text not null default 'percent', discount_value numeric not null default 15, min_order_amount numeric not null default 100000, max_uses integer not null default 100, used_count integer not null default 0, status text not null default 'active', valid_until timestamp, created_at timestamp not null default now());
-create table if not exists marketing_triggers (id serial primary key, title text not null, event_key text not null, action_type text not null default 'discount_message', message_body text not null, discount_bonus integer not null default 0, is_active boolean not null default true, triggered_count integer not null default 0, created_at timestamp not null default now());
-create table if not exists suppliers (id serial primary key, name text not null, contact_person text not null default '', phone text not null default '', email text not null default '', country text not null default 'Uzbekistan', city text not null default 'Tashkent', address text not null default '', inn text not null default '', category text not null default 'chemicals', rating integer not null default 5, lead_time_days integer not null default 7, total_purchased numeric not null default 0, status text not null default 'active', notes text not null default '', created_at timestamp not null default now());
-create table if not exists purchase_orders (id serial primary key, number text not null, supplier_id integer not null, status text not null default 'draft', total numeric not null default 0, paid numeric not null default 0, expected_at timestamp, received_at timestamp, notes text not null default '', created_by text not null default '', created_at timestamp not null default now());
-create table if not exists purchase_items (id serial primary key, purchase_order_id integer not null, product_id integer not null, name text not null, qty integer not null default 1, price numeric not null default 0);
-create table if not exists returns (id serial primary key, order_id integer not null, customer_id integer, reason text not null default 'defect', status text not null default 'pending', refund_amount numeric not null default 0, restock_items boolean not null default false, notes text not null default '', created_by text not null default '', created_at timestamp not null default now());
-create table if not exists couriers (id serial primary key, name text not null, phone text not null default '', vehicle text not null default 'car', zone text not null default 'Tashkent', status text not null default 'available', active_deliveries integer not null default 0, completed_today integer not null default 0, rating integer not null default 5, avatar_color text not null default '#3b82f6', created_at timestamp not null default now());
-create table if not exists deliveries (id serial primary key, order_id integer not null, courier_id integer, status text not null default 'pending', address text not null default '', city text not null default 'Tashkent', scheduled_at timestamp, delivered_at timestamp, notes text not null default '', created_at timestamp not null default now());
-create table if not exists agent_visits (id serial primary key, agent_id integer not null, store_name text not null, store_address text not null default '', gps_coords text not null default '41.2858, 69.2035', status text not null default 'order_placed', order_total numeric not null default 0, notes text not null default '', photos jsonb not null default '[]'::jsonb, visited_at timestamp not null default now());
-create table if not exists tasks (id serial primary key, title text not null, description text not null default '', assignee text not null default '', priority text not null default 'mid', status text not null default 'todo', link_type text not null default '', link_label text not null default '', due_at timestamp, created_by text not null default '', created_at timestamp not null default now());
-create table if not exists agent_messages (id serial primary key, agent_id integer not null, body text not null, from_admin boolean not null default false, read_at timestamp, created_at timestamp not null default now());
-create table if not exists integrations (id serial primary key, key text not null unique, title text not null, enabled boolean not null default false, credentials jsonb not null default '{}'::jsonb, status text not null default 'not_configured', last_check_at timestamp, updated_at timestamp not null default now());
-create table if not exists knowledge_base (id serial primary key, title text not null, category text not null default 'general', content text not null default '', icon text not null default '📄', views integer not null default 0, is_pinned boolean not null default false, created_by text not null default '', updated_at timestamp not null default now(), created_at timestamp not null default now());
-`;
+/**
+ * Базовая (первая) миграция, соответствующая схеме, которую старая версия
+ * приложения создавала «сырым» DDL прямо в рантайме.
+ */
+const BASELINE_TAG = "0000_living_shaman";
 
-async function createTables() {
-  await db.execute(sql.raw(DDL));
+/**
+ * Помечает базовую миграцию как применённую, не выполняя её.
+ *
+ * Нужно для баз, созданных старой версией приложения: таблицы там уже есть,
+ * но журнала миграций нет, поэтому `migrate()` попытался бы выполнить
+ * `CREATE TABLE` и упал бы с «relation already exists».
+ */
+async function baselineExistingDatabase() {
+  const [{ has_tables: hasTables }] = (
+    await db.execute<{ has_tables: boolean }>(sql`
+      select exists (
+        select 1 from information_schema.tables
+        where table_schema = 'public' and table_name = 'products'
+      ) as has_tables
+    `)
+  ).rows;
+
+  if (!hasTables) return; // Чистая база — обычная миграция создаст всё сама.
+
+  // Проверяем наличие таблицы журнала отдельным запросом: Postgres планирует
+  // выражение целиком, поэтому ссылку на несуществующую таблицу нельзя
+  // спрятать даже в невыполняемую ветку CASE.
+  const [{ exists: journalExists }] = (
+    await db.execute<{ exists: boolean }>(
+      sql`select to_regclass('drizzle.__drizzle_migrations') is not null as exists`,
+    )
+  ).rows;
+
+  if (journalExists) {
+    // Важно смотреть именно на записи: прерванный `drizzle-kit migrate`
+    // мог создать пустую таблицу журнала.
+    const [{ applied }] = (
+      await db.execute<{ applied: number }>(
+        sql`select count(*)::int as applied from drizzle."__drizzle_migrations"`,
+      )
+    ).rows;
+
+    if (applied > 0) return; // База уже под управлением миграций.
+  }
+
+  const file = await readFile(path.join(MIGRATIONS_DIR, `${BASELINE_TAG}.sql`), "utf8");
+  const hash = createHash("sha256").update(file).digest("hex");
+  const journal = JSON.parse(
+    await readFile(path.join(MIGRATIONS_DIR, "meta", "_journal.json"), "utf8"),
+  ) as { entries: { tag: string; when: number }[] };
+  const when = journal.entries.find((e) => e.tag === BASELINE_TAG)?.when ?? Date.now();
+
+  await db.execute(sql`create schema if not exists drizzle`);
+  await db.execute(sql`
+    create table if not exists drizzle."__drizzle_migrations" (
+      id serial primary key,
+      hash text not null,
+      created_at bigint
+    )
+  `);
+  await db.execute(sql`
+    insert into drizzle."__drizzle_migrations" (hash, created_at)
+    values (${hash}, ${when})
+  `);
 }
 
-const OWNER_PASSWORD = "delis2026";
+/**
+ * Приводит схему БД в актуальное состояние.
+ *
+ * Раньше таблицы создавались «сырым» DDL (`create table if not exists ...`)
+ * прямо в рантайме: такой подход не умеет изменять уже существующие таблицы
+ * и со временем расходится со `schema.ts`. Теперь источник правды —
+ * сгенерированные миграции (`npm run db:generate`).
+ */
+async function createTables() {
+  await baselineExistingDatabase();
+  await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+}
+
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || "delis2026";
 
 async function ensureAdmin() {
   const hash = hashPassword(OWNER_PASSWORD);
@@ -53,9 +100,51 @@ async function ensureAdmin() {
         select 'Музаффар', 'owner', 'owner@delis.uz', 'owner', ${hash}, true
         where not exists (select 1 from users where login = 'owner')`,
   );
+  // Обновляем строго аккаунт с login='owner': раньше условие цепляло и
+  // строку с тем же email, из-за чего логин 'owner' получали две записи.
   await db.execute(
-    sql`update users set password_hash = ${hash}, login = 'owner', role = 'owner', two_fa = true where login = 'owner' or email = 'owner@delis.uz'`,
+    sql`update users set password_hash = ${hash}, role = 'owner', two_fa = true where login = 'owner'`,
   );
+}
+
+/**
+ * Пароль демо-сотрудников. Отдельно от OWNER_PASSWORD, чтобы владелец и
+ * витринные аккаунты не делили один секрет.
+ */
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || "delis2026";
+
+/** Демо-сотрудники: логин выводится из почты (admin@delis.uz -> admin). */
+const DEMO_STAFF = [
+  { email: "admin@delis.uz", login: "admin" },
+  { email: "manager@delis.uz", login: "manager" },
+  { email: "warehouse@delis.uz", login: "warehouse" },
+  { email: "support@delis.uz", login: "support" },
+  { email: "agent@delis.uz", login: "agent" },
+];
+
+/**
+ * Выдаёт демо-сотрудникам логин и пароль.
+ *
+ * Демо-набор создавал их вообще без учётных данных, поэтому войти можно
+ * было только под owner, а проверить роли вживую — нет. Работает и на уже
+ * существующих базах, поэтому вынесено из блока первичного сида.
+ *
+ * Заполняются только пустые логины: настоящие аккаунты, заведённые через
+ * интерфейс, не трогаем, пароль существующим не перезаписываем.
+ */
+async function ensureDemoStaff() {
+  const hash = hashPassword(DEMO_PASSWORD);
+
+  for (const { email, login } of DEMO_STAFF) {
+    await db.execute(sql`
+      update users
+      set login = ${login},
+          password_hash = ${hash}
+      where email = ${email}
+        and coalesce(login, '') = ''
+        and not exists (select 1 from users u2 where u2.login = ${login})
+    `);
+  }
 }
 
 const CATEGORIES = [
@@ -111,6 +200,9 @@ function rnd(n: number) {
 async function run() {
   await createTables();
   await ensureAdmin();
+  // Демо-сотрудники могут быть как в существующей базе, так и создаваться
+  // ниже при первичном сиде, поэтому логины проставляются в обоих случаях.
+  await ensureDemoStaff();
   const existing = await db.execute<{ count: string }>(sql`select count(*)::text as count from products`);
   if (Number(existing.rows[0]?.count ?? "0") > 0) return;
 
@@ -359,14 +451,19 @@ const prodRows = PRODUCTS.map(([name, catIdx, icon, price, cost, volume], i) => 
     })),
   );
 
+  // Владельца здесь нет: его создаёт ensureAdmin. Иначе появлялся второй
+  // «Музаффар», которому ensureAdmin проставлял login='owner' по совпадению
+  // email — в списке сотрудников висели два одинаковых владельца.
   await db.insert(s.users).values([
-    { name: "Музаффар", email: "owner@delis.uz", role: "owner", twoFa: true },
     { name: "Азиза Мансурова", email: "admin@delis.uz", role: "admin", twoFa: true },
     { name: "Фаррух Юсупов", email: "manager@delis.uz", role: "manager" },
     { name: "Улугбек Сотволдиев", email: "warehouse@delis.uz", role: "warehouse" },
     { name: "Нигора Расулова", email: "support@delis.uz", role: "support" },
     { name: "Шохрух Абдуллаев", email: "agent@delis.uz", role: "agent" },
   ]);
+
+  // Сотрудники только что созданы — выдаём им логины и пароли.
+  await ensureDemoStaff();
 
   await db.insert(s.activity).values([
     { actor: "Азиза Мансурова", action: "изменила цену товара", entity: "DELIS Wax Protect Ceramic" },
