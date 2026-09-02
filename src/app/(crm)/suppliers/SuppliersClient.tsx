@@ -193,7 +193,7 @@ export function SuppliersClient({
     }
   };
 
-  const exportSuppliers = () => {
+  const exportSuppliers = async () => {
     const headers = ["Поставщик", "Контакт", "Телефон", "Email", "Город", "Категория", "Рейтинг", "Срок поставки (дн)", "Закуплено на сумму"];
     const rows = filtered.map((s) => [
       s.name,
@@ -206,8 +206,12 @@ export function SuppliersClient({
       String(s.leadTimeDays),
       s.totalPurchased,
     ]);
-    exportXLSX(headers, rows, `delis-suppliers-${new Date().toISOString().slice(0, 10)}`);
-    toast("Список поставщиков выгружен в XLSX");
+    try {
+      await exportXLSX(headers, rows, `delis-suppliers-${new Date().toISOString().slice(0, 10)}`);
+      toast("Список поставщиков выгружен в XLSX");
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   return (

@@ -210,7 +210,7 @@ export function AgentsClient({
     { label: "Визитов и точек", value: String(visits.length + agents.reduce((a, x) => a + x.visits, 0)), color: "#14b8a6", icon: "📍" },
   ];
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const headers = ["Имя", "Телефон", "Telegram", "Email", "Регион", "Маршрут", "План", "Факт", "Выполнение %", "Комиссия %", "Визитов"];
     const rows = agents.map((a) => [
       a.name,
@@ -225,8 +225,12 @@ export function AgentsClient({
       String(a.commission),
       String(a.visits),
     ]);
-    exportXLSX(headers, rows, `delis-agents-${new Date().toISOString().slice(0, 10)}`);
-    toast("Отчёт по агентам выгружен в XLSX");
+    try {
+      await exportXLSX(headers, rows, `delis-agents-${new Date().toISOString().slice(0, 10)}`);
+      toast("Отчёт по агентам выгружен в XLSX");
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   const orderFormTotal = orderForm.items.reduce((acc, i) => {

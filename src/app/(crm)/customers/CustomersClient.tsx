@@ -9,6 +9,7 @@ import { StatGrid } from "@/widgets/StatCard";
 import { money, dt, SOURCE_LABEL } from "@/shared/lib/format";
 import { exportXLSX } from "@/shared/lib/excel";
 import { useT } from "@/shared/i18n/useT";
+import { useToast } from "@/shared/ui/Toast";
 
 export interface CustomerLite {
   id: number;
@@ -31,6 +32,7 @@ export function CustomersClient({ customers }: { customers: CustomerLite[] }) {
   const [q, setQ] = useState("");
   const [src, setSrc] = useState("all");
   const tr = useT();
+  const toast = useToast();
 
   const filtered = useMemo(
     () =>
@@ -44,7 +46,7 @@ export function CustomersClient({ customers }: { customers: CustomerLite[] }) {
 
   const revenue = customers.reduce((a, c) => a + Number(c.totalSpent), 0);
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const headers = ["Имя", "Фамилия", "Username", "Telegram ID", "Телефон", "Город", "Источник", "VIP", "Бонусы", "Заказов", "Сумма покупок", "Регистрация", "Последняя активность"];
     const rows = filtered.map((c) => [
       c.firstName,
@@ -61,7 +63,11 @@ export function CustomersClient({ customers }: { customers: CustomerLite[] }) {
       dt(c.createdAt),
       dt(c.lastActiveAt),
     ]);
-    exportXLSX(headers, rows, `delis-customers-${new Date().toISOString().slice(0, 10)}`);
+    try {
+      await exportXLSX(headers, rows, `delis-customers-${new Date().toISOString().slice(0, 10)}`);
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
   };
 
   return (

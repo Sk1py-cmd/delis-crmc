@@ -79,7 +79,7 @@ export function OrdersClient({ orders }: { orders: OrderRow[] }) {
     });
   };
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const headers = ["Номер", "Клиент", "Город", "Канал", "Оплата", "Сумма", "Прибыль", "Статус", "Дата"];
     const rows = filtered.map((o) => [
       o.number,
@@ -92,7 +92,11 @@ export function OrdersClient({ orders }: { orders: OrderRow[] }) {
       statusMeta(o.status).label,
       new Date(o.createdAt).toLocaleDateString("ru-RU"),
     ]);
-    exportXLSX(headers, rows, `delis-orders-${new Date().toISOString().slice(0, 10)}`);
+    try {
+      await exportXLSX(headers, rows, `delis-orders-${new Date().toISOString().slice(0, 10)}`);
+    } catch {
+      toast("Не удалось выгрузить файл", "err");
+    }
     toast(tr("orders.excelSaved"));
   };
 
