@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, Loader2, FileText, Film, ImageIcon, Play, Download } from "lucide-react";
 import { useToast } from "@/shared/ui/Toast";
+import { SmartImage } from "@/shared/ui/SmartImage";
 
 export interface MediaFile {
   url: string;
@@ -116,7 +117,7 @@ export function MediaUploader({
                   style={{ width: 92, height: 92, border: `2px solid ${i === 0 ? "var(--primary)" : "rgba(var(--border))"}` }}>
 
                   {f.kind === "image" ? (
-                    <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                    <SmartImage src={f.url} alt={f.name} fill sizes="120px" className="object-cover" />
                   ) : f.kind === "video" ? (
                     <div className="w-full h-full relative" style={{ background: "#000" }}>
                       <video src={f.url} className="w-full h-full object-cover" muted />
@@ -162,10 +163,24 @@ export function MediaPreview({ file }: { file: MediaFile }) {
   if (file.kind === "image") {
     return (
       <>
-        <img src={file.url} alt={file.name} className="rounded-2xl max-w-full cursor-pointer" style={{ maxHeight: 240 }} onClick={() => setOpen(true)} />
+        <SmartImage
+          src={file.url}
+          alt={file.name}
+          width={480}
+          height={240}
+          className="rounded-2xl max-w-full h-auto cursor-pointer"
+          style={{ maxHeight: 240, width: "auto" }}
+          onClick={() => setOpen(true)}
+        />
         {open && (
           <div className="fixed inset-0 z-[200] grid place-items-center p-6" style={{ background: "rgba(0,0,0,0.9)" }} onClick={() => setOpen(false)}>
-            <img src={file.url} alt={file.name} className="max-w-full max-h-full rounded-2xl" />
+            <SmartImage
+              src={file.url}
+              alt={file.name}
+              width={1600}
+              height={1200}
+              className="max-w-full max-h-full w-auto h-auto rounded-2xl"
+            />
           </div>
         )}
       </>

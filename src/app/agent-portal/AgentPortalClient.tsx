@@ -43,6 +43,7 @@ import {
   Sun, Moon,
 } from "lucide-react";
 import { Card, Badge, Avatar, Progress, Modal } from "@/shared/ui/kit";
+import { SmartImage } from "@/shared/ui/SmartImage";
 import { money, compact, dt, timeOnly } from "@/shared/lib/format";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
@@ -563,7 +564,9 @@ export function AgentPortalClient({
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     localStorage.removeItem("delis_token");
-    window.location.assign("/");
+    // Без refresh() в кеше роутера остались бы данные предыдущего агента.
+    router.replace("/");
+    router.refresh();
   };
 
   return (
@@ -1085,9 +1088,9 @@ export function AgentPortalClient({
                         {v.photos.map((p, idx) => (
                           <div
                             key={idx}
-                            className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 shadow"
+                            className="relative w-14 h-14 rounded-xl overflow-hidden border border-white/10 shadow"
                           >
-                            <img src={p} alt="Отчёт" className="w-full h-full object-cover" />
+                            <SmartImage src={p} alt="Фотоотчёт визита" fill sizes="56px" className="object-cover" />
                           </div>
                         ))}
                       </div>

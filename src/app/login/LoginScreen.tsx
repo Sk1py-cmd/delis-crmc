@@ -40,7 +40,10 @@ export function LoginScreen() {
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (data.ok) {
-        window.location.href = "/";
+        // refresh() сбрасывает кеш роутера, чтобы серверные компоненты
+        // перерисовались уже от имени вошедшего пользователя.
+        router.replace("/");
+        router.refresh();
         return;
       }
       setError(data.error ?? t("login.errorEmpty"));

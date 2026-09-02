@@ -6,6 +6,7 @@ import { Search, Send, Paperclip, FileText, Image as ImageIcon, Film, Zap, Check
 import { Card, Badge, Avatar } from "@/shared/ui/kit";
 import { dt, timeOnly, SOURCE_LABEL } from "@/shared/lib/format";
 import { MediaPreview, type MediaFile } from "@/shared/ui/MediaUploader";
+import { SmartImage } from "@/shared/ui/SmartImage";
 import { useT } from "@/shared/i18n/useT";
 
 export interface Thread {
@@ -294,7 +295,7 @@ export function ChatClient({ threads, initialId }: { threads: Thread[]; initialI
             {attachments.map((f, i) => (
               <div key={i} className="relative rounded-xl overflow-hidden" style={{ width: 60, height: 60, border: "1px solid rgba(var(--border))" }}>
                 {f.kind === "image" ? (
-                  <img src={f.url} alt="" className="w-full h-full object-cover" />
+                  <SmartImage src={f.url} alt={f.name} fill sizes="60px" className="object-cover" />
                 ) : (
                   <div className="w-full h-full grid place-items-center text-xl" style={{ background: "rgba(var(--table-row))" }}>
                     {f.kind === "video" ? "🎬" : "📄"}

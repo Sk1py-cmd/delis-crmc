@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, Rocket, Image as ImageIcon } from "lucide-react";
 import { Modal } from "@/shared/ui/kit";
 import { MediaUploader, type MediaFile } from "@/shared/ui/MediaUploader";
+import { SmartImage } from "@/shared/ui/SmartImage";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
 
@@ -76,7 +77,9 @@ export function MiniAppActions() {
                 <div className="text-white/80 text-[0.7rem]">Химия для дома и авто</div>
               </div>
               {media[0] && (
-                <img src={media[0].url} alt="" className="w-full h-28 object-cover" />
+                <div className="relative w-full h-28">
+                  <SmartImage src={media[0].url} alt="Баннер мини-приложения" fill sizes="320px" className="object-cover" />
+                </div>
               )}
               <div className="p-3 grid grid-cols-2 gap-2">
                 {["🧴", "🚗", "✨", "🧺"].map((e, i) => (

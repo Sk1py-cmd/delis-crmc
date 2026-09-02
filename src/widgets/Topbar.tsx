@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Bell, Sun, Moon, MonitorSmartphone, Menu, X, Plus, Languages, Smartphone } from "lucide-react";
 import { useTheme } from "@/shared/store/theme";
@@ -20,6 +20,7 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
   const [menu, setMenu] = useState(false);
   const [profile, setProfile] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const router = useRouter();
   const { mode, set } = useTheme();
   const { locale, setLocale } = useLocale();
   const pathname = usePathname();
@@ -180,7 +181,10 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
                       style={{ color: "var(--error)" }}
                       onClick={async () => {
                         await fetch("/api/auth/logout", { method: "POST" });
-                        window.location.assign("/");
+                        // Без refresh() в кеше роутера остались бы страницы
+                        // предыдущего пользователя.
+                        router.replace("/");
+                        router.refresh();
                       }}
                     >
                       {t("topbar.logout")}
