@@ -107,6 +107,46 @@ async function ensureAdmin() {
   );
 }
 
+/**
+ * Пароль демо-сотрудников. Отдельно от OWNER_PASSWORD, чтобы владелец и
+ * витринные аккаунты не делили один секрет.
+ */
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || "delis2026";
+
+/** Демо-сотрудники: логин выводится из почты (admin@delis.uz -> admin). */
+const DEMO_STAFF = [
+  { email: "admin@delis.uz", login: "admin" },
+  { email: "manager@delis.uz", login: "manager" },
+  { email: "warehouse@delis.uz", login: "warehouse" },
+  { email: "support@delis.uz", login: "support" },
+  { email: "agent@delis.uz", login: "agent" },
+];
+
+/**
+ * Выдаёт демо-сотрудникам логин и пароль.
+ *
+ * Демо-набор создавал их вообще без учётных данных, поэтому войти можно
+ * было только под owner, а проверить роли вживую — нет. Работает и на уже
+ * существующих базах, поэтому вынесено из блока первичного сида.
+ *
+ * Заполняются только пустые логины: настоящие аккаунты, заведённые через
+ * интерфейс, не трогаем, пароль существующим не перезаписываем.
+ */
+async function ensureDemoStaff() {
+  const hash = hashPassword(DEMO_PASSWORD);
+
+  for (const { email, login } of DEMO_STAFF) {
+    await db.execute(sql`
+      update users
+      set login = ${login},
+          password_hash = ${hash}
+      where email = ${email}
+        and coalesce(login, '') = ''
+        and not exists (select 1 from users u2 where u2.login = ${login})
+    `);
+  }
+}
+
 const CATEGORIES = [
   { name: "Home Care", slug: "home-care", kind: "home", icon: "🏠" },
   { name: "Auto Care", slug: "auto-care", kind: "auto", icon: "🚗" },
@@ -160,6 +200,9 @@ function rnd(n: number) {
 async function run() {
   await createTables();
   await ensureAdmin();
+  // Демо-сотрудники могут быть как в существующей базе, так и создаваться
+  // ниже при первичном сиде, поэтому логины проставляются в обоих случаях.
+  await ensureDemoStaff();
   const existing = await db.execute<{ count: string }>(sql`select count(*)::text as count from products`);
   if (Number(existing.rows[0]?.count ?? "0") > 0) return;
 
@@ -418,6 +461,9 @@ const prodRows = PRODUCTS.map(([name, catIdx, icon, price, cost, volume], i) => 
     { name: "Нигора Расулова", email: "support@delis.uz", role: "support" },
     { name: "Шохрух Абдуллаев", email: "agent@delis.uz", role: "agent" },
   ]);
+
+  // Сотрудники только что созданы — выдаём им логины и пароли.
+  await ensureDemoStaff();
 
   await db.insert(s.activity).values([
     { actor: "Азиза Мансурова", action: "изменила цену товара", entity: "DELIS Wax Protect Ceramic" },
