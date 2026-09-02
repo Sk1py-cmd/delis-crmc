@@ -14,6 +14,67 @@ import path from "node:path";
  * реализации `StorageDriver` без правок вызывающего кода.
  */
 
+/** Белый список MIME: принимаем только то, что умеем показывать. */
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "application/pdf",
+]);
+
+export function isAllowedMime(mime: string): boolean {
+  return ALLOWED_MIME.has(mime);
+}
+
+export type FileKind = "image" | "video" | "pdf" | "other";
+
+export function fileKind(mime: string): FileKind {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "pdf";
+  return "other";
+}
+
+/**
+ * Проверяет «магические байты» файла.
+ *
+ * Content-Type приходит от клиента и легко подделывается, поэтому
+ * дополнительно сверяем сигнатуру: так исполняемый файл не притворится
+ * картинкой.
+ */
+export function sniffMatches(buf: Buffer, mime: string): boolean {
+  const startsWith = (...bytes: number[]) => bytes.every((b, i) => buf[i] === b);
+  const ascii = (offset: number, text: string) =>
+    buf.subarray(offset, offset + text.length).toString("latin1") === text;
+
+  switch (mime) {
+    case "image/jpeg":
+      return startsWith(0xff, 0xd8, 0xff);
+    case "image/png":
+      return startsWith(0x89, 0x50, 0x4e, 0x47);
+    case "image/gif":
+      return ascii(0, "GIF8");
+    case "image/webp":
+      return ascii(0, "RIFF") && ascii(8, "WEBP");
+    case "image/avif":
+      return ascii(4, "ftyp");
+    case "video/mp4":
+    case "video/quicktime":
+      return ascii(4, "ftyp");
+    case "video/webm":
+      return startsWith(0x1a, 0x45, 0xdf, 0xa3);
+    case "application/pdf":
+      return ascii(0, "%PDF");
+    default:
+      return false;
+  }
+}
+
 export interface StoredFile {
   /** Публичный URL для отдачи файла клиенту. */
   url: string;

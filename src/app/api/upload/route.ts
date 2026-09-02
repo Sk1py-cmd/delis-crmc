@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/server/auth";
-import { storage } from "@/server/storage";
+import { storage, isAllowedMime, fileKind, sniffMatches } from "@/server/storage";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -13,61 +13,6 @@ const LIMITS: Record<string, number> = {
   video: 25 * 1024 * 1024,     // 25 MB
   application: 10 * 1024 * 1024, // 10 MB (PDF)
 };
-
-/** Белый список MIME: принимаем только то, что умеем показывать. */
-const ALLOWED_MIME = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/avif",
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "application/pdf",
-]);
-
-function fileKind(mime: string): "image" | "video" | "pdf" | "other" {
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime === "application/pdf") return "pdf";
-  return "other";
-}
-
-/**
- * Проверяет «магические байты» файла.
- *
- * Content-Type приходит от клиента и легко подделывается, поэтому
- * дополнительно сверяем сигнатуру: так исполняемый файл не притворится
- * картинкой.
- */
-function sniffMatches(buf: Buffer, mime: string): boolean {
-  const startsWith = (...bytes: number[]) => bytes.every((b, i) => buf[i] === b);
-  const ascii = (offset: number, text: string) =>
-    buf.subarray(offset, offset + text.length).toString("latin1") === text;
-
-  switch (mime) {
-    case "image/jpeg":
-      return startsWith(0xff, 0xd8, 0xff);
-    case "image/png":
-      return startsWith(0x89, 0x50, 0x4e, 0x47);
-    case "image/gif":
-      return ascii(0, "GIF8");
-    case "image/webp":
-      return ascii(0, "RIFF") && ascii(8, "WEBP");
-    case "image/avif":
-      return ascii(4, "ftyp");
-    case "video/mp4":
-    case "video/quicktime":
-      return ascii(4, "ftyp");
-    case "video/webm":
-      return startsWith(0x1a, 0x45, 0xdf, 0xa3);
-    case "application/pdf":
-      return ascii(0, "%PDF");
-    default:
-      return false;
-  }
-}
 
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
@@ -82,7 +27,7 @@ export async function POST(req: NextRequest) {
   const mime = file.type;
   const kind = fileKind(mime);
 
-  if (kind === "other" || !ALLOWED_MIME.has(mime)) {
+  if (kind === "other" || !isAllowedMime(mime)) {
     return NextResponse.json(
       { error: "Поддерживаются только изображения, видео и PDF" },
       { status: 415 },
