@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Card, PageHeader, Badge, Tabs, Modal, Progress, Avatar } from "@/shared/ui/kit";
 import { money, compact, dt, dateOnly, num } from "@/shared/lib/format";
+import { useNow } from "@/shared/lib/useNow";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
 import { exportXLSX } from "@/shared/lib/excel";
@@ -113,6 +114,7 @@ export function SuppliersClient({
   const toast = useToast();
   const tr = useT();
   const router = useRouter();
+  const now = useNow();
 
   const filtered = useMemo(
     () =>
@@ -389,7 +391,7 @@ export function SuppliersClient({
                 {orders.map((o) => {
                   const st = PO_STATUS[o.status] ?? PO_STATUS.draft;
                   const isLate =
-                    o.expectedAt && !o.receivedAt && new Date(o.expectedAt).getTime() < Date.now();
+                    now > 0 && !!o.expectedAt && !o.receivedAt && new Date(o.expectedAt).getTime() < now;
                   return (
                     <tr key={o.id}>
                       <td className="font-semibold">{o.number}</td>

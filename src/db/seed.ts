@@ -44,7 +44,7 @@ async function createTables() {
   await db.execute(sql.raw(DDL));
 }
 
-const OWNER_PASSWORD = "delis2026";
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || "delis2026";
 
 async function ensureAdmin() {
   const hash = hashPassword(OWNER_PASSWORD);

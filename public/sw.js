@@ -1,8 +1,16 @@
-const CACHE = "delis-crm-v1";
-const PRECACHE = ["/", "/login"];
+const CACHE = "delis-crm-v2";
+// Экран логина рендерится самим "/" (отдельного маршрута /login нет),
+// поэтому прекешируем только корень.
+const PRECACHE = ["/"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
+  // addAll атомарен: один неудачный ответ отменяет всю установку SW.
+  // Кешируем поштучно и не падаем, если какой-то ресурс недоступен.
+  e.waitUntil(
+    caches.open(CACHE).then((c) =>
+      Promise.all(PRECACHE.map((url) => c.add(url).catch(() => undefined)))
+    )
+  );
   self.skipWaiting();
 });
 

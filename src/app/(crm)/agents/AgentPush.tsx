@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, TrendingUp, Target, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/shared/ui/Toast";
@@ -22,15 +22,25 @@ interface PushNotif {
 }
 
 export function AgentPush({ agents }: { agents: AgentLite[] }) {
-  const [notifs, setNotifs] = useState<PushNotif[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const toast = useToast();
 
-  useEffect(() => {
+  // Производные данные считаем через useMemo, а не через useEffect + setState:
+  // это исключает лишний ререндер и каскадные обновления.
+  const notifs = useMemo<PushNotif[]>(() => {
     const alerts: PushNotif[] = [];
     agents.forEach((a) => {
       const pct = (Number(a.fact) / Math.max(Number(a.plan), 1)) * 100;
-      if (pct >= 100) {
+      // Порядок важен: сначала самый высокий порог, иначе ветка 110% недостижима.
+      if (pct >= 110) {
+        alerts.push({
+          id: `over-plan-${a.id}`,
+          agentName: a.name,
+          message: `Перевыполнение плана на ${(pct - 100).toFixed(0)}%! Супер-результат 🏆`,
+          color: "#8b5cf6",
+          type: "over_plan",
+        });
+      } else if (pct >= 100) {
         alerts.push({
           id: `plan-done-${a.id}`,
           agentName: a.name,
@@ -46,17 +56,9 @@ export function AgentPush({ agents }: { agents: AgentLite[] }) {
           color: "#f97316",
           type: "near_plan",
         });
-      } else if (pct >= 110) {
-        alerts.push({
-          id: `over-plan-${a.id}`,
-          agentName: a.name,
-          message: `Перевыполнение плана на ${(pct - 100).toFixed(0)}%! Супер-результат 🏆`,
-          color: "#8b5cf6",
-          type: "over_plan",
-        });
       }
     });
-    setNotifs(alerts);
+    return alerts;
   }, [agents]);
 
   const visible = notifs.filter((n) => !dismissed.has(n.id));

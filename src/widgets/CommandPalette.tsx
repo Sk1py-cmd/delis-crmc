@@ -41,17 +41,30 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
   }, [setOpen]);
 
   useEffect(() => {
-    if (!q.trim()) {
-      setHits([]);
-      return;
+    const query = q.trim();
+    const ctrl = new AbortController();
+
+    // Пустой запрос: чистим результаты асинхронно, чтобы не вызывать setState
+    // синхронно в теле эффекта (каскадные ререндеры).
+    if (!query) {
+      const clear = setTimeout(() => setHits([]), 0);
+      return () => clearTimeout(clear);
     }
+
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: ctrl.signal })
         .then((r) => r.json())
         .then((d: { hits: SearchHit[] }) => setHits(d.hits ?? []))
-        .catch(() => setHits([]));
+        .catch((err) => {
+          // AbortError — обычная отмена устаревшего запроса, не ошибка.
+          if ((err as Error)?.name !== "AbortError") setHits([]);
+        });
     }, 180);
-    return () => clearTimeout(t);
+
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
   }, [q]);
 
   const all = [...navHits, ...hits].slice(0, 14);

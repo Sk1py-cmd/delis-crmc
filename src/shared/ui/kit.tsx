@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useMotionValue, useSpring, useInView, HTMLMotionProps } from "framer-motion";
-import { useEffect, useRef, useState, ReactNode } from "react";
+import { useEffect, useId, useRef, useState, ReactNode } from "react";
 import clsx from "clsx";
 
 export function Card({
@@ -118,7 +118,7 @@ export function Tabs({
   value: string;
   onChange: (k: string) => void;
 }) {
-  const id = useRef(`tabs-${Math.random().toString(36).slice(2)}`).current;
+  const id = useId();
   return (
     <div className="flex gap-1 overflow-x-auto no-scrollbar p-1 rounded-full" style={{ background: "rgba(var(--surface),0.5)", border: "1px solid rgba(var(--border))" }}>
       {items.map((it) => (

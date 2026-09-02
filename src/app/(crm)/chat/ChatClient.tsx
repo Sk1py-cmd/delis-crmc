@@ -27,7 +27,12 @@ export interface Msg {
   fromAdmin: boolean;
   kind: string;
   createdAt: string;
+  readAt?: string | null;
 }
+
+/** Стабильные отрицательные id для оптимистичных сообщений (до ответа сервера). */
+let optimisticSeq = 0;
+const nextOptimisticId = () => --optimisticSeq;
 
 export function ChatClient({ threads, initialId }: { threads: Thread[]; initialId?: number }) {
   const [active, setActive] = useState<number>(initialId ?? threads[0]?.id ?? 0);
@@ -50,16 +55,31 @@ export function ChatClient({ threads, initialId }: { threads: Thread[]; initialI
     "Дарим персональную скидку 15% 💜",
   ];
 
-  const load = async (id: number) => {
-    setLoading(true);
-    const res = await fetch(`/api/messages?customerId=${id}`);
-    const data = (await res.json()) as { messages: Msg[] };
-    setMsgs(data.messages);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    if (active) void load(active);
+    if (!active) return;
+
+    const ctrl = new AbortController();
+    let cancelled = false;
+
+    // setState вызываем только асинхронно (в then/catch), а не в теле эффекта,
+    // иначе получаем каскадные ререндеры.
+    fetch(`/api/messages?customerId=${active}`, { signal: ctrl.signal })
+      .then((r) => r.json() as Promise<{ messages: Msg[] }>)
+      .then((data) => {
+        if (cancelled) return;
+        setMsgs(data.messages ?? []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled || (err as Error)?.name === "AbortError") return;
+        setMsgs([]);
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
   }, [active]);
 
   useEffect(() => {
@@ -107,7 +127,7 @@ export function ChatClient({ threads, initialId }: { threads: Thread[]; initialI
     for (const f of files) {
       const label = f.kind === "image" ? "📷 Фото" : f.kind === "video" ? "🎬 Видео" : "📄 Документ";
       const fileMsg: Msg = {
-        id: Date.now() + Math.random(),
+        id: nextOptimisticId(),
         customerId: active,
         body: `${label}: ${f.name}`,
         fromAdmin: true,
@@ -124,7 +144,7 @@ export function ChatClient({ threads, initialId }: { threads: Thread[]; initialI
 
     if (body.trim()) {
       const optimistic: Msg = {
-        id: Date.now(),
+        id: nextOptimisticId(),
         customerId: active,
         body,
         fromAdmin: true,
@@ -240,7 +260,7 @@ export function ChatClient({ threads, initialId }: { threads: Thread[]; initialI
                   {m.body}
                 </div>
                 <div className={`flex items-center gap-1 mt-1 text-[0.68rem] muted ${m.fromAdmin ? "justify-end" : ""}`}>
-                  {timeOnly(m.createdAt)} {m.fromAdmin && (Math.random() > 0.5 ? <CheckCheck size={12} /> : <Check size={12} />)}
+                  {timeOnly(m.createdAt)} {m.fromAdmin && (m.readAt ? <CheckCheck size={12} /> : <Check size={12} />)}
                 </div>
               </motion.div>
             ))}

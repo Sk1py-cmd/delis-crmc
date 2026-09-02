@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Trash2, Calendar, Flag, User, Link2, CheckCircle2, Circle, Clock } from "lucide-react";
 import { Card, PageHeader, Badge, Modal, Avatar } from "@/shared/ui/kit";
 import { dt } from "@/shared/lib/format";
+import { useNow } from "@/shared/lib/useNow";
 import { useToast } from "@/shared/ui/Toast";
 import { postManage } from "@/shared/lib/manage";
 import { useT } from "@/shared/i18n/useT";
@@ -43,6 +44,7 @@ export function TasksClient({ tasks, team }: { tasks: TaskLite[]; team: string[]
   const toast = useToast();
   const tr = useT();
   const router = useRouter();
+  const now = useNow();
 
   const move = async (id: number, status: string) => {
     setDragId(null);
@@ -82,8 +84,8 @@ export function TasksClient({ tasks, team }: { tasks: TaskLite[]; team: string[]
     }
   };
 
-  const overdue = tasks.filter((t) => t.status !== "done" && t.dueAt && new Date(t.dueAt).getTime() < Date.now()).length;
-  const isOverdue = (t: TaskLite) => t.status !== "done" && t.dueAt && new Date(t.dueAt).getTime() < Date.now();
+  const isOverdue = (t: TaskLite) => t.status !== "done" && !!t.dueAt && new Date(t.dueAt).getTime() < now;
+  const overdue = now === 0 ? 0 : tasks.filter(isOverdue).length;
 
   return (
     <>

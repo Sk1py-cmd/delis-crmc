@@ -3,10 +3,17 @@ import { NotificationsClient } from "./NotificationsClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage() {
-  const [activity, orders] = await Promise.all([getActivity(), getOrdersLite()]);
+type Activity = Awaited<ReturnType<typeof getActivity>>;
+type OrdersLite = Awaited<ReturnType<typeof getOrdersLite>>;
 
-  const items = [
+/**
+ * Сборка ленты уведомлений вынесена из компонента: обращение к Date.now()
+ * внутри рендера нарушает правила чистоты React (react-hooks/purity).
+ */
+function buildItems(activity: Activity, orders: OrdersLite) {
+  const now = Date.now();
+
+  return [
     ...orders.slice(0, 6).map((o) => ({
       id: `o${o.id}`,
       title: `Новый заказ ${o.number}`,
@@ -32,7 +39,7 @@ export default async function NotificationsPage() {
       channel: "push",
       status: "delivered",
       color: "#f97316",
-      at: new Date(Date.now() - 3600e3).toISOString(),
+      at: new Date(now - 3600e3).toISOString(),
     },
     {
       id: "w2",
@@ -41,9 +48,14 @@ export default async function NotificationsPage() {
       channel: "email",
       status: "sent",
       color: "#3b82f6",
-      at: new Date(Date.now() - 7200e3).toISOString(),
+      at: new Date(now - 7200e3).toISOString(),
     },
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+}
+
+export default async function NotificationsPage() {
+  const [activity, orders] = await Promise.all([getActivity(), getOrdersLite()]);
+  const items = buildItems(activity, orders);
 
   return <NotificationsClient items={items} />;
 }
