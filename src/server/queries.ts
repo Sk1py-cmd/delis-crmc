@@ -947,8 +947,24 @@ export async function createReturn(input: { orderId: number; reason: string; not
 
 export async function approveReturn(id: number, restock: boolean, actor: string) {
   const [ret] = await db.select().from(s.returns).where(eq(s.returns.id, id));
-  if (!ret) throw new Error("Возврат не найден");
-  await db.update(s.returns).set({ status: "refunded", restockItems: restock }).where(eq(s.returns.id, id));
+  if (!ret) throw new BusinessError("Возврат не найден");
+  // Повторное одобрение раньше проходило молча: деньги возвращались клиенту
+  // дважды, а товар дважды зачислялся на склад. Статус меняем условно и
+  // проверяем, что обновилась именно эта строка — так две одновременные
+  // попытки не смогут обе пройти дальше.
+  if (ret.status === "refunded") {
+    throw new BusinessError("Возврат уже одобрен");
+  }
+
+  const updated = await db
+    .update(s.returns)
+    .set({ status: "refunded", restockItems: restock })
+    .where(and(eq(s.returns.id, id), sql`${s.returns.status} <> 'refunded'`))
+    .returning({ id: s.returns.id });
+
+  if (updated.length === 0) {
+    throw new BusinessError("Возврат уже одобрен");
+  }
   if (restock) {
     const items = await db.select().from(s.orderItems).where(eq(s.orderItems.orderId, ret.orderId));
     for (const it of items) {
@@ -1148,8 +1164,8 @@ export async function createPurchaseOrder(input: {
 
 export async function receivePurchaseOrder(id: number, actor: string) {
   const [po] = await db.select().from(s.purchaseOrders).where(eq(s.purchaseOrders.id, id));
-  if (!po) throw new Error("Закупка не найдена");
-  if (po.status === "received") throw new Error("Эта партия уже принята на склад");
+  if (!po) throw new BusinessError("Закупка не найдена");
+  if (po.status === "received") throw new BusinessError("Эта партия уже принята на склад");
 
   const items = await db.select().from(s.purchaseItems).where(eq(s.purchaseItems.purchaseOrderId, id));
 
