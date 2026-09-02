@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { canAccess, navForRole, ROLE_ACCESS, NAV, isKnownRole } from "@/shared/config/nav";
 import { canManageUsers } from "@/server/auth";
@@ -117,5 +119,38 @@ describe("canManageUsers", () => {
     for (const role of ["manager", "warehouse", "agent", "support", "operator", ""]) {
       expect(canManageUsers(role), `роль ${role}`).toBe(false);
     }
+  });
+});
+
+describe("защита разделов централизована", () => {
+  it("layout проверяет права, а не отдельные страницы", async () => {
+    // Точечный requireAccess стоял на 4 страницах из 24, поэтому остальные
+    // открывались по прямой ссылке. Проверка должна жить в общем layout.
+    const layout = await readFile(
+      path.join(process.cwd(), "src/app/(crm)/layout.tsx"),
+      "utf8",
+    );
+
+    expect(layout).toContain("canAccess");
+    expect(layout).toContain("redirect");
+  });
+
+  it("middleware пробрасывает путь для этой проверки", async () => {
+    const mw = await readFile(path.join(process.cwd(), "src/middleware.ts"), "utf8");
+
+    expect(mw).toContain("x-pathname");
+    // Роль не должна браться из cookie — её подделает клиент.
+    expect(mw).not.toMatch(/cookies.*role/i);
+  });
+
+  it("раздел вычисляется по первому сегменту пути", () => {
+    const sectionOf = (p: string) => {
+      const [, first] = p.split("/");
+      return first ? `/${first}` : "/";
+    };
+
+    expect(sectionOf("/warehouse")).toBe("/warehouse");
+    expect(sectionOf("/orders/DLS-24001")).toBe("/orders");
+    expect(sectionOf("/")).toBe("/");
   });
 });
