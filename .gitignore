@@ -30,3 +30,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vercel
+
+# uploaded files
+/public/uploads/*
+!/public/uploads/.gitkeep
