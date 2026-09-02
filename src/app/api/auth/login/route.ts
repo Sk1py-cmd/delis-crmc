@@ -7,6 +7,7 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { verifyPassword } from "@/server/password";
 import { COOKIE } from "@/server/auth";
+import { attemptKey, checkRateLimit, clearAttempts, clientIp, recordFailure } from "@/server/rate-limit";
 
 export async function POST(req: NextRequest) {
   await ensureSeed();
@@ -17,11 +18,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Введите логин и пароль" }, { status: 400 });
   }
 
+  // Ограничение перебора: без него 30 попыток проходили за 1.8 с.
+  const key = attemptKey(login, clientIp(req.headers));
+  const limit = await checkRateLimit(key);
+  if (!limit.allowed) {
+    const minutes = Math.ceil(limit.retryAfterSec / 60);
+    return NextResponse.json(
+      { error: `Слишком много попыток входа. Повторите через ${minutes} мин.` },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
+
   const rows = await db.select().from(s.users).where(sql`lower(${s.users.login}) = lower(${login})`).limit(1);
   const user = rows[0];
   if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
-    return NextResponse.json({ error: "Неверный логин или пароль" }, { status: 401 });
+    // Считаем и несуществующие логины: иначе перебор имён шёл бы свободно.
+    const after = await recordFailure(key);
+    const error = after.remaining > 0
+      ? "Неверный логин или пароль"
+      : "Слишком много попыток входа. Повторите позже.";
+
+    return NextResponse.json({ error }, { status: after.remaining > 0 ? 401 : 429 });
   }
+
+  // Успешный вход обнуляет счётчик.
+  await clearAttempts(key);
 
   const token = crypto.randomUUID();
   await db.insert(s.sessions).values({

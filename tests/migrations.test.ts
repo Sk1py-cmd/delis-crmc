@@ -72,10 +72,20 @@ describe.skipIf(!url)("миграции", () => {
       await withDb(db, async (c) => {
         await applyMigrations(c);
 
-        const { rows } = await c.query<{ n: string }>(
-          `select count(*) n from information_schema.tables where table_schema='public'`,
+        // Сверяем со схемой, а не с числом: раньше здесь было жёсткое 30,
+        // и тест падал при добавлении любой новой таблицы.
+        const { rows } = await c.query<{ table_name: string }>(
+          `select table_name from information_schema.tables where table_schema='public'`,
         );
-        expect(Number(rows[0].n)).toBe(30);
+        const actual = new Set(rows.map((r) => r.table_name));
+
+        const snapshot = JSON.parse(
+          await readFile(path.join(MIGRATIONS, "meta", "0000_snapshot.json"), "utf8"),
+        ) as { tables: Record<string, unknown> };
+        const fromSnapshot = Object.keys(snapshot.tables).map((t) => t.replace(/^public\./, ""));
+
+        expect(fromSnapshot.filter((t) => !actual.has(t))).toEqual([]);
+        expect(actual.size).toBeGreaterThanOrEqual(fromSnapshot.length);
       });
     } finally {
       await withAdmin((c) => c.query(`drop database if exists ${db} with (force)`));
