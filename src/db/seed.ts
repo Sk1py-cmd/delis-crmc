@@ -100,8 +100,10 @@ async function ensureAdmin() {
         select 'Музаффар', 'owner', 'owner@delis.uz', 'owner', ${hash}, true
         where not exists (select 1 from users where login = 'owner')`,
   );
+  // Обновляем строго аккаунт с login='owner': раньше условие цепляло и
+  // строку с тем же email, из-за чего логин 'owner' получали две записи.
   await db.execute(
-    sql`update users set password_hash = ${hash}, login = 'owner', role = 'owner', two_fa = true where login = 'owner' or email = 'owner@delis.uz'`,
+    sql`update users set password_hash = ${hash}, role = 'owner', two_fa = true where login = 'owner'`,
   );
 }
 
@@ -406,8 +408,10 @@ const prodRows = PRODUCTS.map(([name, catIdx, icon, price, cost, volume], i) => 
     })),
   );
 
+  // Владельца здесь нет: его создаёт ensureAdmin. Иначе появлялся второй
+  // «Музаффар», которому ensureAdmin проставлял login='owner' по совпадению
+  // email — в списке сотрудников висели два одинаковых владельца.
   await db.insert(s.users).values([
-    { name: "Музаффар", email: "owner@delis.uz", role: "owner", twoFa: true },
     { name: "Азиза Мансурова", email: "admin@delis.uz", role: "admin", twoFa: true },
     { name: "Фаррух Юсупов", email: "manager@delis.uz", role: "manager" },
     { name: "Улугбек Сотволдиев", email: "warehouse@delis.uz", role: "warehouse" },

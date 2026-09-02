@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccess, navForRole, ROLE_ACCESS, NAV } from "@/shared/config/nav";
+import { canAccess, navForRole, ROLE_ACCESS, NAV, isKnownRole } from "@/shared/config/nav";
 import { canManageUsers } from "@/server/auth";
 
 describe("canAccess", () => {
@@ -47,17 +47,37 @@ describe("canAccess", () => {
     }
   });
 
-  it("ЗАФИКСИРОВАНО: неизвестная роль получает полный доступ", () => {
-    // Текущее поведение — fail-open: роль без записи в ROLE_ACCESS видит всё.
-    // Тест закрепляет это как осознанное решение; если политику поменяют
-    // на fail-closed, тест упадёт и напомнит обновить ожидание.
-    expect(canAccess("новая_роль", "/finance")).toBe(true);
+  it("неизвестная роль не получает доступ к закрытым разделам", () => {
+    // Политика fail-closed: роли без записи в ROLE_ACCESS остаются только
+    // главная и настройки. Раньше такая роль видела всё, включая финансы.
+    expect(canAccess("новая_роль", "/finance")).toBe(false);
+    expect(canAccess("новая_роль", "/users")).toBe(false);
+    expect(canAccess("", "/finance")).toBe(false);
+  });
+
+  it("неизвестной роли остаются главная и настройки", () => {
+    expect(canAccess("новая_роль", "/")).toBe(true);
+    expect(canAccess("новая_роль", "/settings")).toBe(true);
+  });
+
+  it("isKnownRole отличает настоящие роли от произвольных", () => {
+    expect(isKnownRole("owner")).toBe(true);
+    expect(isKnownRole("warehouse")).toBe(true);
+    expect(isKnownRole("суперадмин")).toBe(false);
+    expect(isKnownRole("")).toBe(false);
   });
 });
 
 describe("navForRole", () => {
   it("owner получает полное меню", () => {
     expect(navForRole("owner")).toHaveLength(NAV.length);
+  });
+
+  it("меню неизвестной роли не содержит финансов", () => {
+    const hrefs = navForRole("новая_роль").map((n) => n.href);
+    expect(hrefs).not.toContain("/finance");
+    expect(hrefs).not.toContain("/users");
+    expect(hrefs.length).toBeLessThan(NAV.length);
   });
 
   it("ограниченная роль получает урезанное меню", () => {

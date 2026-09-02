@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
+import { isKnownRole } from "@/shared/config/nav";
 import { getSessionUser, canManageUsers } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
 import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners } from "@/server/queries";
@@ -39,11 +40,21 @@ export async function POST(req: NextRequest) {
         if (!/^[a-z0-9._-]{3,24}$/.test(login)) {
           return NextResponse.json({ error: "Логин: 3–24 символа, латиница/цифры/точка/дефис" }, { status: 400 });
         }
+        const role = str(d.role, "manager");
+        // Роль приходит из запроса, поэтому проверяем по белому списку:
+        // произвольное значение раньше попадало в БД как есть.
+        if (!isKnownRole(role)) {
+          return NextResponse.json({ error: `Недопустимая роль: ${role}` }, { status: 400 });
+        }
+        // Владелец в системе один — назначать эту роль через API нельзя.
+        if (role === "owner") {
+          return NextResponse.json({ error: "Роль owner назначить нельзя" }, { status: 403 });
+        }
         const exists = await db.select({ id: s.users.id }).from(s.users).where(sql`lower(${s.users.login}) = ${login}`).limit(1);
         if (exists.length > 0) return NextResponse.json({ error: `Логин «${login}» уже занят` }, { status: 409 });
         const [u] = await db
           .insert(s.users)
-          .values({ name, login, email: str(d.email).trim(), role: str(d.role, "manager"), passwordHash: hashPassword(password) })
+          .values({ name, login, email: str(d.email).trim(), role, passwordHash: hashPassword(password) })
           .returning();
         await db.insert(s.activity).values({ actor: user.name, action: "создал аккаунт сотрудника", entity: `@${login}` });
         return NextResponse.json({ ok: true, id: u.id });
