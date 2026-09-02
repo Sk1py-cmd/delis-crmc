@@ -3,7 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
-import { isKnownRole } from "@/shared/config/nav";
+import { isKnownRole, canAccess } from "@/shared/config/nav";
+import { ACTION_POLICY, DENY_MESSAGE } from "@/shared/config/actions";
 import { getSessionUser, canManageUsers } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
 import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
@@ -27,10 +28,26 @@ export async function POST(req: NextRequest) {
   const d = body.data ?? {};
   const admin = canManageUsers(user.role);
 
+  // Единая проверка прав до выполнения действия. Точечные if в отдельных
+  // ветках покрывали лишь 8 действий из 45 — остальное мог сделать любой
+  // авторизованный пользователь, минуя ограничения меню.
+  const policy = ACTION_POLICY[body.action];
+  if (!policy) {
+    return NextResponse.json({ error: `Неизвестное действие: ${body.action}` }, { status: 400 });
+  }
+  const denied =
+    policy === "admin"
+      ? !admin
+      : policy !== "self" && !canAccess(user.role, policy);
+
+  if (denied) {
+    const error = DENY_MESSAGE[body.action] ?? "Недостаточно прав для этого действия";
+    return NextResponse.json({ error }, { status: 403 });
+  }
+
   try {
     switch (body.action) {
       case "createUser": {
-        if (!admin) return NextResponse.json({ error: "Только Owner/Admin может создавать аккаунты" }, { status: 403 });
         const name = str(d.name).trim();
         const login = str(d.login).trim().toLowerCase().replace(/\s+/g, "");
         const password = str(d.password);
@@ -60,19 +77,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, id: u.id });
       }
       case "resetPassword": {
-        if (!admin) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
         const password = str(d.password);
         if (password.length < 4) return NextResponse.json({ error: "Пароль слишком короткий" }, { status: 400 });
         await db.update(s.users).set({ passwordHash: hashPassword(password) }).where(eq(s.users.id, num(d.id)));
         return NextResponse.json({ ok: true });
       }
       case "toggle2fa": {
-        if (!admin) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
         await db.update(s.users).set({ twoFa: sql`not two_fa` }).where(eq(s.users.id, num(d.id)));
         return NextResponse.json({ ok: true });
       }
       case "deleteUser": {
-        if (!admin) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
         const id = num(d.id);
         const [target] = await db.select().from(s.users).where(eq(s.users.id, id));
         if (!target) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
@@ -335,7 +349,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, id: m.id });
       }
       case "saveIntegration": {
-        if (!admin) return NextResponse.json({ error: "Только Owner/Admin может менять интеграции" }, { status: 403 });
         const creds = (d.credentials as Record<string, string>) ?? {};
         const i = await saveIntegration({ key: str(d.key), credentials: creds, enabled: Boolean(d.enabled), actor: user.name });
         return NextResponse.json({ ok: true, id: i?.id, status: i?.status });
