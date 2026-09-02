@@ -6,7 +6,7 @@ import { ensureSeed } from "@/db/seed";
 import { isKnownRole } from "@/shared/config/nav";
 import { getSessionUser, canManageUsers } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
-import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku } from "@/server/queries";
+import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -493,6 +493,9 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Ошибка сервера";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Нарушение бизнес-правила (например, нехватка товара) — это 400:
+    // клиент показывает текст пользователю, а не «ошибку сервера».
+    const status = e instanceof BusinessError ? 400 : 500;
+    return NextResponse.json({ error: msg }, { status });
   }
 }

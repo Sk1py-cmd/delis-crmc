@@ -3,6 +3,15 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 
+
+/** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
+export class BusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BusinessError";
+  }
+}
+
 /**
  * Номера заказов, закупок и SKU выдаются последовательностями Postgres.
  *
@@ -789,6 +798,17 @@ export async function deleteProduct(id: number) {
 
 export async function adjustStock(productId: number, kind: string, qty: number, note: string) {
   const delta = kind === "in" ? qty : -qty;
+  // greatest(0, ...) оставлен намеренно: он защищает от отрицательного
+  // остатка при ручных корректировках склада. Но списать больше, чем есть,
+  // теперь нельзя — иначе движение склада расходилось бы с остатком.
+  if (delta < 0) {
+    const [p] = await db.select({ stock: s.products.stock, name: s.products.name })
+      .from(s.products).where(eq(s.products.id, productId));
+    if (!p) throw new BusinessError("Товар не найден");
+    if (p.stock < qty) {
+      throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+    }
+  }
   await db
     .update(s.products)
     .set({ stock: sql`greatest(0, stock + ${delta})` })
@@ -800,6 +820,13 @@ export async function adjustStock(productId: number, kind: string, qty: number, 
 
 export async function createOrderQuick(customerId: number, productId: number, qty: number, payment = "click") {
   const [p] = await db.select().from(s.products).where(eq(s.products.id, productId));
+  // Раньше отсутствующий товар падал с TypeError (500), а заказ на объём
+  // больше остатка проходил: adjustStock прятал минус через greatest(0,...),
+  // из-за чего склад обнулялся, а в выручку попадала невыполнимая сумма.
+  if (!p) throw new BusinessError("Товар не найден");
+  if (p.stock < qty) {
+    throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+  }
   const total = Number(p.price) * qty;
   const orderNumber = await nextOrderNumber();
   const [order] = await db
@@ -839,6 +866,9 @@ export async function createMultiOrder(customerId: number, items: { productId: n
     const p = prodMap.get(it.productId);
     if (!p) continue;
     const qty = Math.max(1, it.qty);
+    if (p.stock < qty) {
+      throw new BusinessError(`Недостаточно товара «${p.name}»: на складе ${p.stock}, запрошено ${qty}`);
+    }
     total += Number(p.price) * qty;
     costTotal += Number(p.cost) * qty;
     orderItems.push({ productId: p.id, name: p.name, qty, price: p.price });
