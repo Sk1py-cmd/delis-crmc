@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attemptKey, clientIp, MAX_ATTEMPTS, WINDOW_MS } from "@/server/rate-limit";
+import { attemptKey, clientIp, loginKey, MAX_ATTEMPTS, MAX_LOGIN_ATTEMPTS, WINDOW_MS } from "@/server/rate-limit";
 
 /**
  * Ограничение перебора паролей.
@@ -24,18 +24,37 @@ describe("ключ ограничения", () => {
 });
 
 describe("определение IP клиента", () => {
-  it("берёт первый адрес из x-forwarded-for", () => {
+  it("берёт первый адрес из x-forwarded-for за доверенным прокси", () => {
     const h = new Headers({ "x-forwarded-for": "203.0.113.5, 10.0.0.1" });
 
-    expect(clientIp(h)).toBe("203.0.113.5");
+    expect(clientIp(h, true)).toBe("203.0.113.5");
   });
 
   it("использует x-real-ip, если forwarded нет", () => {
-    expect(clientIp(new Headers({ "x-real-ip": "198.51.100.7" }))).toBe("198.51.100.7");
+    expect(clientIp(new Headers({ "x-real-ip": "198.51.100.7" }), true)).toBe("198.51.100.7");
   });
 
   it("без заголовков возвращает unknown, а не падает", () => {
-    expect(clientIp(new Headers())).toBe("unknown");
+    expect(clientIp(new Headers(), true)).toBe("unknown");
+  });
+
+  it("без доверия прокси игнорирует заголовки клиента", () => {
+    // Иначе клиент шлёт новый x-forwarded-for на каждую попытку,
+    // ключ всякий раз новый и лимит по логин+IP не срабатывает вовсе.
+    const h = new Headers({ "x-forwarded-for": "1.2.3.4", "x-real-ip": "5.6.7.8" });
+
+    expect(clientIp(h, false)).toBe("unknown");
+  });
+});
+
+describe("запасной лимит по логину", () => {
+  it("не зависит от адреса — подмена forwarded его не обходит", () => {
+    expect(loginKey("owner")).toBe(loginKey("  OWNER "));
+    expect(loginKey("owner")).not.toBe(loginKey("admin"));
+  });
+
+  it("порог выше основного, чтобы не блокировать честного пользователя", () => {
+    expect(MAX_LOGIN_ATTEMPTS).toBeGreaterThan(MAX_ATTEMPTS);
   });
 });
 

@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, ne } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
@@ -30,6 +30,31 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Завершает сессии пользователя.
+ *
+ * Смена пароля не разрывала уже выданные сессии: после кражи ноутбука или
+ * утечки cookie старый пароль переставал работать, а сама cookie продолжала
+ * открывать разделы CRM — то есть смена пароля не решала ровно ту задачу,
+ * ради которой её делают.
+ *
+ * `exceptToken` оставляет текущую вкладку живой, чтобы пользователь,
+ * сменивший себе пароль, не выкидывался из системы сразу после нажатия
+ * кнопки. Для админского сброса токен не передаётся — гасятся все.
+ */
+export async function revokeUserSessions(userId: number, exceptToken?: string): Promise<void> {
+  const scope = eq(s.sessions.userId, userId);
+
+  await db.delete(s.sessions).where(
+    exceptToken ? and(scope, ne(s.sessions.token, exceptToken)) : scope,
+  );
+}
+
+/** Токен текущей сессии — нужен, чтобы не гасить свою же вкладку. */
+export async function currentSessionToken(): Promise<string | undefined> {
+  return (await cookies()).get(COOKIE)?.value;
 }
 
 export function canManageUsers(role: string) {

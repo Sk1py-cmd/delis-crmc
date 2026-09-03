@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Новый пуш в ту же ветку отменяет предыдущий прогон — незачем занимать
+# раннеры проверкой кода, который уже переписан.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Быстрые проверки без базы: падают за секунды и ловят большинство ошибок.
+  static:
+    name: Линт, типы и юнит-тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Проверка типов
+        run: npm run typecheck
+
+      # Проект unit не требует DATABASE_URL — переменная намеренно не задана,
+      # это заодно проверяет, что база не протекла в юнит-тесты.
+      - name: Юнит-тесты
+        run: npm run test:unit
+
+  # Интеграционные: миграции, последовательности номеров, сессии.
+  integration:
+    name: Интеграционные тесты (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db
+        ports:
+          - 5432:5432
+        # Без health-check шаги стартуют раньше, чем сервер примет соединения.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Тесты создают и удаляют временные базы, поэтому нужен доступ
+      # к серверу целиком, а не только к app_db.
+      - name: Интеграционные тесты
+        run: npm run test:db
+
+  build:
+    name: Сборка
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # next build обращается к БД только в рантайме, но переменная должна
+      # существовать: без неё падает разбор конфигурации.
+      - name: Сборка
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db

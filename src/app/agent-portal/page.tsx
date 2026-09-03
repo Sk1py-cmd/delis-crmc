@@ -1,4 +1,5 @@
 import { getSessionUser } from "@/server/auth";
+import { canAccess } from "@/shared/config/nav";
 import { getProducts, getAgentVisits } from "@/server/queries";
 import { db } from "@/db";
 import { redirect } from "next/navigation";
@@ -14,19 +15,28 @@ export default async function AgentPortalPage() {
     redirect("/");
   }
 
-  // Находим соответствующего агента по email или первому в базе
-  let agent = (await db.select().from(s.agents).where(eq(s.agents.email, user.email)).limit(1))[0];
-  if (!agent) {
-    const allAgs = await db.select().from(s.agents).limit(1);
-    agent = allAgs[0];
+  // Страница лежит вне группы (crm), поэтому общая проверка прав из
+  // layout сюда не доходит — раньше портал открывали склад и поддержка.
+  if (!canAccess(user.role, "/agent-portal")) {
+    redirect("/");
   }
+
+  // Агент связан с пользователем по email. Подстановки «первого из базы»
+  // здесь быть не должно: она показывала чужие визиты, план и выручку
+  // любому, у кого своей записи нет.
+  const agent = (
+    await db.select().from(s.agents).where(eq(s.agents.email, user.email)).limit(1)
+  )[0];
 
   if (!agent) {
     return (
       <div className="min-h-screen grid place-items-center p-6 text-center">
         <div>
           <h2 className="text-xl font-bold">Агент не найден</h2>
-          <p className="muted text-sm mt-1">Пожалуйста, создайте запись агента в CRM.</p>
+          <p className="muted text-sm mt-1">
+            К вашему аккаунту ({user.email}) не привязана карточка агента.
+            Попросите администратора создать её в разделе «Агенты».
+          </p>
         </div>
       </div>
     );

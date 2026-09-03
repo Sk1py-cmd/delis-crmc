@@ -7,7 +7,7 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { verifyPassword } from "@/server/password";
 import { COOKIE } from "@/server/auth";
-import { attemptKey, checkRateLimit, clearAttempts, clientIp, recordFailure } from "@/server/rate-limit";
+import { MAX_LOGIN_ATTEMPTS, attemptKey, checkRateLimit, clearAttempts, clientIp, loginKey, recordFailure } from "@/server/rate-limit";
 
 export async function POST(req: NextRequest) {
   await ensureSeed();
@@ -20,13 +20,19 @@ export async function POST(req: NextRequest) {
 
   // Ограничение перебора: без него 30 попыток проходили за 1.8 с.
   const key = attemptKey(login, clientIp(req.headers));
-  const limit = await checkRateLimit(key);
-  if (!limit.allowed) {
-    const minutes = Math.ceil(limit.retryAfterSec / 60);
-    return NextResponse.json(
-      { error: `Слишком много попыток входа. Повторите через ${minutes} мин.` },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
-    );
+  // Второй ключ — по одному логину. `x-forwarded-for` подделывается клиентом,
+  // и со свежим адресом в каждом запросе первый лимит обходился бы полностью.
+  const byLogin = loginKey(login);
+
+  for (const [k, max] of [[key, undefined], [byLogin, MAX_LOGIN_ATTEMPTS]] as const) {
+    const limit = await checkRateLimit(k, new Date(), max);
+    if (!limit.allowed) {
+      const minutes = Math.ceil(limit.retryAfterSec / 60);
+      return NextResponse.json(
+        { error: `Слишком много попыток входа. Повторите через ${minutes} мин.` },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+      );
+    }
   }
 
   const rows = await db.select().from(s.users).where(sql`lower(${s.users.login}) = lower(${login})`).limit(1);
@@ -34,6 +40,7 @@ export async function POST(req: NextRequest) {
   if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
     // Считаем и несуществующие логины: иначе перебор имён шёл бы свободно.
     const after = await recordFailure(key);
+    await recordFailure(byLogin, new Date(), MAX_LOGIN_ATTEMPTS);
     const error = after.remaining > 0
       ? "Неверный логин или пароль"
       : "Слишком много попыток входа. Повторите позже.";
@@ -43,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   // Успешный вход обнуляет счётчик.
   await clearAttempts(key);
+  await clearAttempts(byLogin);
 
   const token = crypto.randomUUID();
   await db.insert(s.sessions).values({
@@ -55,6 +63,9 @@ export async function POST(req: NextRequest) {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
+    // По HTTPS cookie не должна уходить в открытом виде. В dev по http
+    // флаг выключен, иначе браузер её просто не сохранит.
+    secure: process.env.NODE_ENV === "production",
     maxAge: 30 * 86400,
   });
   await db.update(s.users).set({ lastLoginAt: new Date() }).where(sql`${s.users.id} = ${user.id}`);

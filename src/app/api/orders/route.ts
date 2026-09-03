@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOrderQuick, createMultiOrder, recentOrdersList, BusinessError } from "@/server/queries";
 import { revalidatePath } from "next/cache";
-import { getSessionUser } from "@/server/auth";
+import { requireApiAccess } from "@/server/apiGuard";
 
 /** Список последних заказов. Параметр `limit` — от 1 до 200. */
 export async function GET(req: NextRequest) {
-  const auth = await getSessionUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireApiAccess("/orders");
+  if (!guard.ok) return guard.response;
 
   const raw = Number(req.nextUrl.searchParams.get("limit") ?? 100);
   const limit = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 1), 200) : 100;
@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await getSessionUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireApiAccess("/orders");
+  if (!guard.ok) return guard.response;
   const body = (await req.json()) as { customerId: number; productId?: number; qty?: number; payment?: string; items?: { productId: number; qty: number }[] };
   if (!body.customerId) return NextResponse.json({ error: "invalid" }, { status: 400 });
 

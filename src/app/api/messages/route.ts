@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addMessage, getMessages, markThreadRead } from "@/server/queries";
-import { getSessionUser } from "@/server/auth";
+import { requireApiAccess } from "@/server/apiGuard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   // Переписка с клиентами — не публичные данные.
-  const auth = await getSessionUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireApiAccess("/chat");
+  if (!guard.ok) return guard.response;
 
   const id = Number(req.nextUrl.searchParams.get("customerId") ?? 0);
   if (!id) return NextResponse.json({ messages: [] });
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await getSessionUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireApiAccess("/chat");
+  if (!guard.ok) return guard.response;
   const body = (await req.json()) as { customerId: number; body: string; kind?: string };
   if (!body.customerId || !body.body?.trim()) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
