@@ -57,7 +57,9 @@ npm run dev
 | `npm start`           | Запуск собранного приложения               |
 | `npm run lint`        | ESLint                                     |
 | `npm run typecheck`   | Проверка типов (`tsc --noEmit`)            |
-| `npm test`            | Тесты (Vitest)                             |
+| `npm test`            | Все тесты (Vitest)                         |
+| `npm run test:unit`   | Только юнит-тесты, база не нужна           |
+| `npm run test:db`     | Только интеграционные (нужен `DATABASE_URL`) |
 | `npm run test:watch`  | Тесты в watch-режиме                       |
 | `npm run db:generate` | Сгенерировать миграцию из `src/db/schema.ts` |
 | `npm run db:migrate`  | Применить миграции вручную                 |
