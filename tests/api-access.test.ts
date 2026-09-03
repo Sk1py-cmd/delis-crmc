@@ -100,6 +100,34 @@ describe("матрица ролей закрывает найденные дыр
   });
 });
 
+describe("сквозные каналы к закрытым данным", () => {
+  it("печатные формы требуют доступ к заказам", () => {
+    // Счета, накладные и акты сверки содержат суммы, долг и контакты
+    // клиента. Раньше layout проверял только вход, и кладовщик открывал
+    // акт сверки по прямой ссылке.
+    const src = readFileSync(path.join(process.cwd(), "src/app/print/layout.tsx"), "utf8");
+
+    expect(src).toContain("canAccess");
+    expect(src).toContain('"/orders"');
+  });
+
+  it("склад не имеет доступа к заказам и клиентам, значит и к печати", () => {
+    expect(canAccess("warehouse", "/orders")).toBe(false);
+    expect(canAccess("warehouse", "/customers")).toBe(false);
+  });
+
+  it("поиск фильтрует выдачу по роли", () => {
+    // Иначе поиск работает обходным каналом: кладовщик видел клиентов
+    // с телефонами и суммы заказов через строку поиска.
+    const src = readFileSync(path.join(process.cwd(), "src/server/queries.ts"), "utf8");
+    const fn = src.slice(src.indexOf("export async function search("));
+
+    expect(fn).toContain("canAccess");
+    expect(fn.slice(0, 2000)).toMatch(/allowed\("\/products"\)/);
+    expect(fn.slice(0, 2000)).toMatch(/allowed\("\/customers"\)/);
+  });
+});
+
 describe("диалоги агентов", () => {
   const src = routeSource("agent-messages/route.ts");
 

@@ -2,6 +2,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { ensureSeed, syncNumberSequences } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
+import { canAccess } from "@/shared/config/nav";
 
 
 /** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
@@ -733,22 +734,43 @@ export async function getContent(surface: string) {
   return db.select().from(s.contentBlocks).where(eq(s.contentBlocks.surface, surface));
 }
 
-export async function search(q: string) {
+/**
+ * Глобальный поиск.
+ *
+ * Результаты фильтруются по правам роли: раньше выдача была одинаковой
+ * для всех, и кладовщик через строку поиска видел клиентов с телефонами
+ * и суммы заказов, хотя оба раздела ему закрыты. Ссылки в выдаче вели
+ * на страницы, куда роль всё равно не пускают, — то есть поиск работал
+ * обходным каналом к тем же данным.
+ *
+ * `role` необязателен: без него (внутренние вызовы) выдача полная.
+ */
+export async function search(q: string, role?: string) {
   await init();
   const like = `%${q}%`;
+  const allowed = (section: string) => !role || canAccess(role, section);
+
   const [prods, ords, custs, ags] = await Promise.all([
-    db.select().from(s.products).where(sql`name ilike ${like} or sku ilike ${like} or barcode ilike ${like}`).limit(5),
-    db
-      .select()
-      .from(s.orders)
-      .where(sql`number ilike ${like} or status ilike ${like}`)
-      .limit(5),
-    db
-      .select()
-      .from(s.customers)
-      .where(sql`first_name ilike ${like} or last_name ilike ${like} or username ilike ${like} or phone ilike ${like}`)
-      .limit(5),
-    db.select().from(s.agents).where(sql`name ilike ${like} or region ilike ${like}`).limit(4),
+    allowed("/products")
+      ? db.select().from(s.products).where(sql`name ilike ${like} or sku ilike ${like} or barcode ilike ${like}`).limit(5)
+      : [],
+    allowed("/orders")
+      ? db
+          .select()
+          .from(s.orders)
+          .where(sql`number ilike ${like} or status ilike ${like}`)
+          .limit(5)
+      : [],
+    allowed("/customers")
+      ? db
+          .select()
+          .from(s.customers)
+          .where(sql`first_name ilike ${like} or last_name ilike ${like} or username ilike ${like} or phone ilike ${like}`)
+          .limit(5)
+      : [],
+    allowed("/agents")
+      ? db.select().from(s.agents).where(sql`name ilike ${like} or region ilike ${like}`).limit(4)
+      : [],
   ]);
   return [
     ...prods.map((p) => ({ type: "Товар", title: p.name, subtitle: `${p.sku} · остаток ${p.stock}`, href: `/products?id=${p.id}` })),
