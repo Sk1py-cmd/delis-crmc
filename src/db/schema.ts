@@ -230,7 +230,11 @@ export const activity = pgTable("activity", {
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),
   token: text("token").notNull().unique(),
-  userId: integer("user_id").notNull(),
+  // Каскад: без внешнего ключа удаление пользователя оставляло сессии
+  // висеть сиротами, и чистка зависела только от кода приложения.
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   device: text("device").notNull().default(""),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

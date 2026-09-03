@@ -252,6 +252,10 @@ async function run() {
   // Демо-сотрудники могут быть как в существующей базе, так и создаваться
   // ниже при первичном сиде, поэтому логины проставляются в обоих случаях.
   await ensureDemoStaff();
+  // Протухшие сессии никто не удалял, а таблица читается на каждый запрос.
+  // Запрос заинлайнен намеренно: auth.ts импортирует ensureSeed отсюда,
+  // и обратный импорт замкнул бы модули в цикл.
+  await db.execute(sql`delete from sessions where expires_at < now()`);
   const existing = await db.execute<{ count: string }>(sql`select count(*)::text as count from products`);
   if (Number(existing.rows[0]?.count ?? "0") > 0) {
     // База уже наполнена — счётчики могли отстать от данных, залитых

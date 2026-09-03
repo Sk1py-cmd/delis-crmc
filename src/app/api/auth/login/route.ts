@@ -63,6 +63,9 @@ export async function POST(req: NextRequest) {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
+    // По HTTPS cookie не должна уходить в открытом виде. В dev по http
+    // флаг выключен, иначе браузер её просто не сохранит.
+    secure: process.env.NODE_ENV === "production",
     maxAge: 30 * 86400,
   });
   await db.update(s.users).set({ lastLoginAt: new Date() }).where(sql`${s.users.id} = ${user.id}`);

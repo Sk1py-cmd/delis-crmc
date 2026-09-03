@@ -5,7 +5,7 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { isKnownRole, canAccess } from "@/shared/config/nav";
 import { ACTION_POLICY, DENY_MESSAGE } from "@/shared/config/actions";
-import { getSessionUser, canManageUsers } from "@/server/auth";
+import { getSessionUser, canManageUsers, revokeUserSessions, currentSessionToken } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
 import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
 
@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
         const password = str(d.password);
         if (password.length < 4) return NextResponse.json({ error: "Пароль слишком короткий" }, { status: 400 });
         await db.update(s.users).set({ passwordHash: hashPassword(password) }).where(eq(s.users.id, num(d.id)));
+        // Смена пароля обязана разлогинить: иначе украденная cookie
+        // продолжает работать, и сброс не защищает.
+        await revokeUserSessions(num(d.id));
         return NextResponse.json({ ok: true });
       }
       case "toggle2fa": {
@@ -92,6 +95,7 @@ export async function POST(req: NextRequest) {
         if (!target) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
         if (target.role === "owner") return NextResponse.json({ error: "Нельзя удалить Owner-аккаунт" }, { status: 403 });
         await db.delete(s.users).where(eq(s.users.id, id));
+        await revokeUserSessions(id);
         await db.insert(s.activity).values({ actor: user.name, action: "удалил аккаунт", entity: target.email });
         return NextResponse.json({ ok: true });
       }
@@ -417,6 +421,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Неверный текущий пароль" }, { status: 403 });
         }
         await db.update(s.users).set({ passwordHash: hashPassword(str(d.newPassword)) }).where(eq(s.users.id, userRow.id));
+        await revokeUserSessions(userRow.id, await currentSessionToken());
         await db.insert(s.activity).values({ actor: user.name, action: "сменил пароль", entity: "свой аккаунт" });
         return NextResponse.json({ ok: true });
       }
@@ -433,6 +438,7 @@ export async function POST(req: NextRequest) {
         const exists = await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.login, newLogin)).limit(1);
         if (exists.length > 0) return NextResponse.json({ error: "Логин уже занят" }, { status: 409 });
         await db.update(s.users).set({ login: newLogin }).where(eq(s.users.id, userRow.id));
+        await revokeUserSessions(userRow.id, await currentSessionToken());
         await db.insert(s.activity).values({ actor: user.name, action: "сменил логин", entity: `@${newLogin}` });
         return NextResponse.json({ ok: true, login: newLogin });
       }

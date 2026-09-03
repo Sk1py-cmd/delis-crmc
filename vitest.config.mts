@@ -24,7 +24,11 @@ const alias = {
  */
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 
-const INTEGRATION = ["tests/migrations.test.ts", "tests/sequences.test.ts"];
+const INTEGRATION = [
+  "tests/migrations.test.ts",
+  "tests/sequences.test.ts",
+  "tests/sessions.test.ts",
+];
 
 export default defineConfig({
   resolve: { alias },
