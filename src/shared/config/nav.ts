@@ -41,7 +41,7 @@ export interface NavItem {
 export const ROLE_ACCESS: Record<string, string[]> = {
   manager: ["/", "/company-os", "/analytics", "/tasks", "/knowledge", "/orders", "/products", "/warehouse", "/suppliers", "/delivery", "/returns", "/customers", "/agents", "/marketing", "/chat", "/broadcast", "/notifications", "/miniapp", "/website", "/instagram", "/settings"],
   warehouse: ["/", "/tasks", "/knowledge", "/products", "/warehouse", "/suppliers", "/returns", "/delivery", "/settings"],
-  agent: ["/", "/tasks", "/knowledge", "/orders", "/customers", "/agents", "/chat", "/settings"],
+  agent: ["/", "/tasks", "/knowledge", "/orders", "/customers", "/agents", "/agent-portal", "/chat", "/settings"],
   support: ["/", "/tasks", "/knowledge", "/chat", "/customers", "/orders", "/returns", "/notifications", "/settings"],
   moderator: ["/", "/tasks", "/knowledge", "/products", "/miniapp", "/website", "/instagram", "/marketing", "/broadcast", "/settings"],
   operator: ["/", "/tasks", "/knowledge", "/orders", "/customers", "/chat", "/delivery", "/settings"],

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setOrderStatus } from "@/server/queries";
 import { revalidatePath } from "next/cache";
-import { getSessionUser } from "@/server/auth";
+import { requireApiAccess } from "@/server/apiGuard";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await getSessionUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const guard = await requireApiAccess("/orders");
+  if (!guard.ok) return guard.response;
   const { id } = await ctx.params;
   const body = (await req.json()) as { status?: string };
   if (!body.status) return NextResponse.json({ error: "status required" }, { status: 400 });

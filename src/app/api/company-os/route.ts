@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCompanyOS } from "@/server/queries";
-import { getSessionUser } from "@/server/auth";
+import { requireApiAccess } from "@/server/apiGuard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Сводка содержит выручку за день — раздел доступен не всем ролям.
+  const guard = await requireApiAccess("/company-os");
+  if (!guard.ok) return guard.response;
   const os = await getCompanyOS();
   return NextResponse.json({
     ok: true,

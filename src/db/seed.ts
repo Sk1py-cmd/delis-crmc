@@ -331,7 +331,10 @@ const prodRows = PRODUCTS.map(([name, catIdx, icon, price, cost, volume], i) => 
     fact: String(Math.round(Number(plan) * (0.55 + Math.random() * 0.7))),
     phone: `+9989${rnd(9)}${1000000 + rnd(8999999)}`,
     telegram: `@delis_agent_${i + 1}`,
-    email: `agent${i + 1}@delis.uz`,
+    // Первый агент получает почту демо-пользователя `agent`: портал и
+    // диалоги связывают агента с аккаунтом по email, и без совпадения
+    // демо-роль оставалась без своей карточки.
+    email: i === 0 ? "agent@delis.uz" : `agent${i + 1}@delis.uz`,
     visits: 20 + rnd(120),
     commission: 5 + rnd(6),
     avatarColor: String(color),
