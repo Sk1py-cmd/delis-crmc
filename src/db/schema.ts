@@ -215,6 +215,7 @@ export const users = pgTable("users", {
   lastIp: text("last_ip").notNull().default("94.158.0.1"),
   device: text("device").notNull().default("MacBook Pro · Chrome"),
   twoFa: boolean("two_fa").notNull().default(false),
+  otpSecret: text("otp_secret"),
   passwordHash: text("password_hash").notNull().default(""),
   lastLoginAt: timestamp("last_login_at").notNull().defaultNow(),
 });

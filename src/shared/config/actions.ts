@@ -21,6 +21,8 @@ export const ACTION_POLICY: Record<string, ActionPolicy> = {
   createUser: "admin",
   resetPassword: "admin",
   toggle2fa: "admin",
+  setup2fa: "admin",
+  confirm2fa: "admin",
   deleteUser: "admin",
   // Деньги.
   addTransaction: "admin",
@@ -88,6 +90,8 @@ export const DENY_MESSAGE: Record<string, string> = {
   createUser: "Только Owner/Admin может создавать аккаунты",
   resetPassword: "Только Owner/Admin может менять пароли сотрудников",
   toggle2fa: "Только Owner/Admin может менять настройки 2FA",
+  setup2fa: "Только Owner/Admin может включать 2FA",
+  confirm2fa: "Только Owner/Admin может подтверждать 2FA",
   deleteUser: "Только Owner/Admin может удалять аккаунты",
   saveIntegration: "Только Owner/Admin может менять интеграции",
   addTransaction: "Только Owner/Admin может проводить операции по кассе",

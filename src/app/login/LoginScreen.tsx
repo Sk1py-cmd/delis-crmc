@@ -11,6 +11,8 @@ import { LOCALES, type Locale } from "@/shared/i18n/locales";
 export function LoginScreen() {
   const [login, setLogin] = useState("owner");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [needs2fa, setNeeds2fa] = useState(false);
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,14 +38,20 @@ export function LoginScreen() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: normalizedLogin, password: normalizedPassword }),
+        body: JSON.stringify({ login: normalizedLogin, password: normalizedPassword, code: otp.trim() }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; error?: string; requires2fa?: boolean };
       if (data.ok) {
         // refresh() сбрасывает кеш роутера, чтобы серверные компоненты
         // перерисовались уже от имени вошедшего пользователя.
         router.replace("/");
         router.refresh();
+        return;
+      }
+      if (data.requires2fa) {
+        setNeeds2fa(true);
+        setOtp("");
+        setLoading(false);
         return;
       }
       setError(data.error ?? t("login.errorEmpty"));
@@ -153,6 +161,27 @@ export function LoginScreen() {
             </button>
           </div>
 
+          {needs2fa && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
+              <div className="rounded-2xl p-3.5 mb-1" style={{ background: "color-mix(in srgb, var(--success) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--success) 30%, transparent)" }}>
+                <p className="text-sm mb-2.5">Введите 6-значный код из приложения-аутентификатора</p>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 muted" />
+                  <input
+                    className="input !pl-11 !py-3 text-center tracking-[0.5em]"
+                    placeholder="••••••"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    autoFocus
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {error && (
             <motion.div
               initial={{ opacity: 0, x: -8 }}
@@ -164,13 +193,19 @@ export function LoginScreen() {
             </motion.div>
           )}
 
-          <motion.button whileTap={{ scale: 0.98 }} className="btn btn-primary justify-center !py-3 mt-1" disabled={loading}>
-            {loading ? t("login.submitting") : (
+          <motion.button whileTap={{ scale: 0.98 }} className="btn btn-primary justify-center !py-3 mt-1" disabled={loading || (needs2fa && otp.length !== 6)}>
+            {loading ? t("login.submitting") : needs2fa ? "Подтвердить код" : (
               <>
                 <LogIn size={16} /> {t("login.submit")}
               </>
             )}
           </motion.button>
+
+          {needs2fa && (
+            <button type="button" className="text-sm muted text-center mt-1 hover:opacity-80 transition-opacity" onClick={() => { setNeeds2fa(false); setOtp(""); }}>
+              ← Вернуться к входу
+            </button>
+          )}
         </form>
 
         <div className="mt-5 flex items-center gap-2 text-[0.72rem] muted">

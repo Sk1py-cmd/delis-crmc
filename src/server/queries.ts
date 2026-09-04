@@ -3,6 +3,7 @@ import * as s from "@/db/schema";
 import { ensureSeed, syncNumberSequences } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 import { canAccess } from "@/shared/config/nav";
+import { statusMeta } from "@/shared/lib/format";
 
 
 /** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
@@ -844,7 +845,32 @@ export async function setOrderStatus(id: number, status: string, by = "Муза�
   await db.insert(s.activity).values({ actor: by, action: `изменил статус на «${status}»`, entity: order.number });
   await recordSyncEvent({ source: "crm", target: "telegram_bot", entity: "order", action: "order_status_changed", payload: { order: order.number, status } });
   await recordSyncEvent({ source: "crm", target: "miniapp", entity: "order", action: "customer_order_updated", payload: { order: order.number, status } });
+  // Реальная доставка статуса клиенту в Telegram, а не только sync-событие:
+  // если у клиента есть telegram_id и бот подключён, шлём ему сообщение.
+  await notifyCustomerStatusChanged(order.number, order.customerId, status);
   return updated;
+}
+
+/**
+ * Отправляет клиенту в Telegram сообщение о смене статуса его заказа.
+ *
+ * Сбой доставки (бот выключен, нет сети, у клиента нет telegram_id) не
+ * должен ломать саму смену статуса — поэтому молча проглатываем ошибки.
+ */
+async function notifyCustomerStatusChanged(orderNumber: string, customerId: number | null, status: string) {
+  if (!customerId) return;
+  try {
+    const [c] = await db
+      .select({ telegramId: s.customers.telegramId })
+      .from(s.customers)
+      .where(eq(s.customers.id, customerId))
+      .limit(1);
+    if (!c?.telegramId) return;
+    const label = statusMeta(status).label;
+    await sendTelegramMessage(c.telegramId, `📦 Ваш заказ ${orderNumber}: статус «${label}»`);
+  } catch {
+    /* Смена статуса важнее, чем уведомление */
+  }
 }
 
 export async function addMessage(customerId: number, body: string, fromAdmin = true, kind = "text") {

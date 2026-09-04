@@ -7,13 +7,15 @@ import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
 import { verifyPassword } from "@/server/password";
 import { COOKIE } from "@/server/auth";
+import { verifyTotp } from "@/server/totp";
 import { MAX_LOGIN_ATTEMPTS, attemptKey, checkRateLimit, clearAttempts, clientIp, loginKey, recordFailure } from "@/server/rate-limit";
 
 export async function POST(req: NextRequest) {
   await ensureSeed();
-  const body = (await req.json()) as { login?: string; password?: string };
+  const body = (await req.json()) as { login?: string; password?: string; code?: string };
   const login = (body.login ?? "").trim();
   const password = body.password ?? "";
+  const code = (body.code ?? "").trim();
   if (!login || !password) {
     return NextResponse.json({ error: "Введите логин и пароль" }, { status: 400 });
   }
@@ -48,9 +50,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error }, { status: after.remaining > 0 ? 401 : 429 });
   }
 
-  // Успешный вход обнуляет счётчик.
+  // Пароль верный — обнуляем счётчик до проверки 2FA: перебор пароля
+  // остановлен, а код 2FA ограничивается отдельно ниже.
   await clearAttempts(key);
   await clearAttempts(byLogin);
+
+  // Двухфакторная защита: включена и ключ установлен — без верного кода
+  // сессию не выдаём. Флаг two_fa без секрета ничего не требует (защита
+  // от «включили 2FA, а ключ не сохранился» — иначе аккаунт был бы заперт).
+  if (user.twoFa && user.otpSecret) {
+    if (!code) {
+      return NextResponse.json({ ok: false, requires2fa: true }, { status: 200 });
+    }
+    if (!verifyTotp(code, user.otpSecret)) {
+      // Перебор кода тоже ограничиваем теми же ключами, что и пароль.
+      await recordFailure(key);
+      await recordFailure(byLogin, new Date(), MAX_LOGIN_ATTEMPTS);
+      return NextResponse.json({ error: "Неверный код подтверждения" }, { status: 401 });
+    }
+  }
 
   const token = crypto.randomUUID();
   await db.insert(s.sessions).values({

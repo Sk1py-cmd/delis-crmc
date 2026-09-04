@@ -337,14 +337,14 @@ export default async function DashboardPage() {
       <div className="grid gap-[var(--gap)] xl:grid-cols-2">
         <TasksToday />
         <Card hover={false}>
-          <h3 className="font-semibold mb-3">⚡ Что ещё можно улучшить</h3>
+          <h3 className="font-semibold mb-3">✅ Что уже реализовано</h3>
           <div className="flex flex-col gap-2">
             {[
-              { icon: "🤖", title: "Telegram Bot API", desc: "Реальная отправка статусов заказов клиентам", color: "#0ea5e9" },
-              { icon: "📊", title: "Excel/PDF отчёты", desc: "Экспорт продаж, агентов и финансов одной кнопкой", color: "#22c55e" },
-              { icon: "🔔", title: "WebSocket уведомления", desc: "Мгновенные алерты без обновления страницы", color: "#f97316" },
+              { icon: "🤖", title: "Telegram Bot API", desc: "Статусы заказов уходят клиенту в Telegram", color: "#0ea5e9" },
+              { icon: "📊", title: "Excel/PDF отчёты", desc: "Экспорт заказов, агентов, финансов и печатные формы", color: "#22c55e" },
+              { icon: "🔔", title: "Live-уведомления (SSE)", desc: "Мгновенные алерты без обновления страницы", color: "#f97316" },
               { icon: "🗺️", title: "GPS-карта агентов", desc: "Маршруты и визиты на интерактивной карте", color: "#8b5cf6" },
-              { icon: "📱", title: "PWA для телефона", desc: "Установить CRM как приложение на телефон", color: "#3b82f6" },
+              { icon: "📱", title: "PWA для телефона", desc: "Установка CRM на главный экран", color: "#3b82f6" },
               { icon: "🔐", title: "2FA авторизация", desc: "Двухфакторная защита для Owner/Admin", color: "#ec4899" },
             ].map((r) => (
               <div key={r.title} className="flex items-center gap-3 rounded-2xl p-3" style={{ background: "rgba(var(--table-row))" }}>
@@ -353,6 +353,7 @@ export default async function DashboardPage() {
                   <div className="text-[0.83rem] font-semibold" style={{ color: r.color }}>{r.title}</div>
                   <div className="text-xs muted truncate">{r.desc}</div>
                 </div>
+                <span className="text-[0.7rem] font-semibold shrink-0" style={{ color: "var(--success)" }}>Готово</span>
               </div>
             ))}
           </div>
