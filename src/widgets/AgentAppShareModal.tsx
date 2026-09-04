@@ -4,17 +4,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone,
-  QrCode,
   Copy,
   Check,
   Send,
-  Download,
-  Share2,
   CheckCircle2,
   ExternalLink,
-  Sparkles,
-  Layers,
-  WifiOff,
 } from "lucide-react";
 import { Modal, Badge } from "@/shared/ui/kit";
 import { useToast } from "@/shared/ui/Toast";
@@ -47,7 +41,7 @@ export function AgentAppShareModal({
 
   const shareTelegram = () => {
     const text = encodeURIComponent(
-      `📲 DELIS Mobile Agent — приложение для торговых агентов:\n${appUrl}\n\nЛогин: agent\nПароль: delis2026`
+      `📲 DELIS Mobile Agent — приложение для торговых агентов:\n${appUrl}`
     );
     window.open(`https://t.me/share/url?url=${encodeURIComponent(appUrl)}&text=${text}`, "_blank");
   };
@@ -126,24 +120,6 @@ export function AgentAppShareModal({
                 >
                   {copied ? <Check size={16} /> : <Copy size={16} />}
                 </button>
-              </div>
-            </div>
-
-            {/* Данные для входа */}
-            <div
-              className="p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs"
-              style={{ background: "rgba(var(--table-row))", border: "1px solid rgba(var(--border))" }}
-            >
-              <div className="font-bold text-violet-300 flex items-center gap-1.5">
-                <Sparkles size={14} /> Данные для входа агента:
-              </div>
-              <div className="flex justify-between items-center pt-1 border-t border-white/5">
-                <span className="muted">Логин:</span>
-                <b className="font-mono text-sm bg-white/10 px-2 py-0.5 rounded-lg">agent</b>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="muted">Пароль:</span>
-                <b className="font-mono text-sm bg-white/10 px-2 py-0.5 rounded-lg">delis2026</b>
               </div>
             </div>
 

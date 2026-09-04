@@ -126,8 +126,8 @@ export function IntegrationsClient({ integrations, role }: { integrations: Integ
     if (resetConfirm !== "УДАЛИТЬ") { toast("Введите слово УДАЛИТЬ для подтверждения", "err"); return; }
     setBusy(true);
     try {
-      await postManage("resetDemoData", { keepSettings: true });
-      toast("Демо-данные очищены — система готова к реальной работе!");
+      await postManage("resetOperationalData", { keepSettings: true });
+      toast("Данные очищены — система готова к работе!");
       setResetModal(false);
       setResetConfirm("");
       router.refresh();
@@ -145,7 +145,7 @@ export function IntegrationsClient({ integrations, role }: { integrations: Integ
         actions={
           role === "owner" && (
             <button className="btn" style={{ color: "var(--error)", borderColor: "color-mix(in srgb, var(--error) 40%, transparent)" }} onClick={() => setResetModal(true)}>
-              <Trash2 size={15} /> {tr("integrations.clearDemo")}
+              <Trash2 size={15} /> {tr("integrations.resetData")}
             </button>
           )
         }
@@ -255,7 +255,7 @@ export function IntegrationsClient({ integrations, role }: { integrations: Integ
 
       {/* Модалка сброса данных */}
       {resetModal && (
-        <Modal open onClose={() => setResetModal(false)} title="⚠️ Очистка демо-данных">
+        <Modal open onClose={() => setResetModal(false)} title="⚠️ Сброс данных">
           <div className="flex flex-col gap-3.5">
             <div className="rounded-2xl p-4" style={{ background: "color-mix(in srgb, #ef4444 12%, transparent)", border: "1px solid color-mix(in srgb, #ef4444 35%, transparent)" }}>
               <div className="font-semibold text-sm mb-2" style={{ color: "var(--error)" }}>Будут удалены безвозвратно:</div>

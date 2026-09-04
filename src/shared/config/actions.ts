@@ -44,7 +44,7 @@ export const ACTION_POLICY: Record<string, ActionPolicy> = {
   // Инфраструктура.
   saveIntegration: "admin",
   syncEverything: "admin",
-  resetDemoData: "admin",
+  resetOperationalData: "admin",
 
   // --- Над собой ----------------------------------------------------------
   changePassword: "self",

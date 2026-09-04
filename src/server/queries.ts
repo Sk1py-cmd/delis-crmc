@@ -80,7 +80,7 @@ export async function getCompanyOS() {
     { key: "warehouse", label: "Склад", status: Number(counts.lowStock) > 0 ? "attention" : "online", latency: 24, color: "#f97316", items: Number(counts.lowStock) },
     { key: "finance", label: "Финансы", status: "online", latency: 29, color: "#14b8a6", items: Number(counts.todayRevenue) },
     { key: "agents", label: "Агенты продаж", status: "online", latency: 63, color: "#ec4899", items: Number(counts.agents) },
-    { key: "marketing", label: "Маркетинг", status: "online", latency: 48, color: "#a855f7", items: 6 },
+    { key: "marketing", label: "Маркетинг", status: "online", latency: 48, color: "#a855f7", items: 0 },
   ];
   return { counts, sync, modules };
 }
@@ -1417,14 +1417,17 @@ export async function getMarketingData() {
     })
     .from(s.orders);
 
-  // Канали привлечения и расходы
-  const adChannels = [
-    { name: "Telegram Bot / Ads", spent: 18400000, revenue: 84200000, leads: 1240, orders: 380, roi: 358, color: "#0ea5e9" },
-    { name: "Telegram Mini App", spent: 8200000, revenue: 56100000, leads: 910, orders: 290, roi: 584, color: "#8b5cf6" },
-    { name: "Instagram Ads / Reels", spent: 24600000, revenue: 78900000, leads: 2180, orders: 310, roi: 221, color: "#ec4899" },
-    { name: "Агенты и B2B рекомендации", spent: 12000000, revenue: 95400000, leads: 320, orders: 180, roi: 695, color: "#22c55e" },
-    { name: "Официальный сайт SEO/Direct", spent: 4800000, revenue: 32000000, leads: 480, orders: 110, roi: 567, color: "#f59e0b" },
-  ];
+  // Каналы привлечения и расходы. Реальные данные появятся здесь после
+  // подключения рекламных интеграций; демо-значения не заливаем.
+  const adChannels: {
+    name: string;
+    spent: number;
+    revenue: number;
+    leads: number;
+    orders: number;
+    roi: number;
+    color: string;
+  }[] = [];
 
   return {
     promos,
@@ -1753,8 +1756,8 @@ export async function getPnLReport() {
   return { byCategory, byChannel, byMonth, expenses, topProducts };
 }
 
-// ═══ СБРОС ДЕМО-ДАННЫХ ═══
-export async function resetDemoData(actor: string, keepSettings = true) {
+// ═══ СБРОС ОПЕРАЦИОННЫХ ДАННЫХ ═══
+export async function resetOperationalData(actor: string, keepSettings = true) {
   await db.execute(sql`
     truncate table order_items, orders, messages, agent_messages, agent_visits,
       stock_moves, purchase_items, purchase_orders, returns, deliveries,
@@ -1772,7 +1775,7 @@ export async function resetDemoData(actor: string, keepSettings = true) {
   // Таблицы очищены — возвращаем счётчики номеров к стартовым значениям,
   // иначе они продолжали бы расти относительно уже несуществующих заказов.
   await syncNumberSequences();
-  await db.insert(s.activity).values({ actor, action: "очистил демо-данные системы", entity: "Полный сброс операций" });
+  await db.insert(s.activity).values({ actor, action: "сбросил операционные данные системы", entity: "Полный сброс операций" });
   return { ok: true };
 }
 

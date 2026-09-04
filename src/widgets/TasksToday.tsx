@@ -13,15 +13,6 @@ interface Task {
   icon: string;
 }
 
-const DEFAULTS: Task[] = [
-  { id: "1", text: "Обработать новые заказы из Mini App", done: false, priority: "high", icon: "🧾" },
-  { id: "2", text: "Ответить клиентам в чате (7 непрочитанных)", done: false, priority: "high", icon: "💬" },
-  { id: "3", text: "Пополнить склад: DELIS Glass Cleaner < 12 шт", done: false, priority: "high", icon: "📦" },
-  { id: "4", text: "Утвердить отчёт агента Шохруха за неделю", done: false, priority: "mid", icon: "📋" },
-  { id: "5", text: "Подготовить рассылку для VIP-клиентов", done: false, priority: "mid", icon: "📣" },
-  { id: "6", text: "Обновить баннер на Главной Mini App", done: true, priority: "low", icon: "🖼️" },
-];
-
 const PRIORITY_STYLE = {
   high: { color: "#ef4444", bg: "color-mix(in srgb, #ef4444 14%, transparent)", label: "Срочно" },
   mid: { color: "#f97316", bg: "color-mix(in srgb, #f97316 14%, transparent)", label: "Важно" },
@@ -29,7 +20,7 @@ const PRIORITY_STYLE = {
 };
 
 export function TasksToday() {
-  const [tasks, setTasks] = useState<Task[]>(DEFAULTS);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newText, setNewText] = useState("");
 
   const toggle = (id: string) =>
@@ -72,6 +63,9 @@ export function TasksToday() {
       </div>
 
       <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+        {tasks.length === 0 && (
+          <p className="muted text-xs text-center py-6">Нет задач на сегодня</p>
+        )}
         <AnimatePresence>
           {tasks.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0)).map((t) => {
             const pStyle = PRIORITY_STYLE[t.priority];

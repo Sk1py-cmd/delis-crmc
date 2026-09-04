@@ -33,38 +33,20 @@ export function AgentChat({ agents }: { agents: AgentLite[] }) {
   const [active, setActive] = useState(agents[0]?.id ?? 0);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [text, setText] = useState("");
-  const [typing, setTyping] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const current = agents.find((a) => a.id === active);
 
   useEffect(() => {
     if (!active) return;
-    const agent = agents.find((a) => a.id === active);
-    if (!agent) return;
 
     // Load real messages from API
     const load = async () => {
       try {
         const res = await fetch(`/api/agent-messages?agentId=${active}`);
         const data = (await res.json()) as { messages: ChatMsg[] };
-        if (data.messages.length > 0) {
-          setMessages(data.messages);
-        } else {
-          // Seed initial conversation if empty
-          const seedMessages: ChatMsg[] = [
-            { id: 1, body: `Здравствуйте, ${agent.name}! Как продвигается план на сегодня?`, fromAdmin: true, createdAt: new Date(Date.now() - 3600000).toISOString(), read: true },
-            { id: 2, body: "Добрый день! Уже посетил 3 точки, план на 78%. Буду у Prestige через час.", fromAdmin: false, createdAt: new Date(Date.now() - 3200000).toISOString(), read: true },
-            { id: 3, body: "Отлично! Попробуй заехать на мойку на Бунёдкор — там заказывают оптом.", fromAdmin: true, createdAt: new Date(Date.now() - 2800000).toISOString(), read: true },
-            { id: 4, body: "Принял! У Prestige оформил заказ на 1.2 млн — керамический воск и шампунь 🎉", fromAdmin: false, createdAt: new Date(Date.now() - 1800000).toISOString(), read: true },
-            { id: 5, body: "Супер! Это +15% к плану. Продолжай в том же духе 💪", fromAdmin: true, createdAt: new Date(Date.now() - 900000).toISOString(), read: true },
-          ];
-          setMessages(seedMessages);
-        }
+        setMessages(data.messages ?? []);
       } catch {
-        // Fallback to seed data
-        setMessages([
-          { id: 1, body: `Здравствуйте, ${agent.name}! Как продвигается план?`, fromAdmin: true, createdAt: new Date().toISOString(), read: true },
-        ]);
+        setMessages([]);
       }
     };
     void load();
@@ -96,29 +78,6 @@ export function AgentChat({ agents }: { agents: AgentLite[] }) {
     } catch {
       /* ignore */
     }
-
-    setTyping(true);
-    setTimeout(() => {
-      setTyping(false);
-      const replies = [
-        "Принято, сделаю! 👍",
-        "Уже в пути к следующей точке 🚗",
-        "Отлично, запишу в отчёт",
-        "Спасибо! Постараюсь перевыполнить план",
-        "Есть! Фотоотчёт отправлю через 20 минут 📸",
-      ];
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          body: replies[Math.floor(Math.random() * replies.length)],
-          fromAdmin: false,
-          createdAt: new Date().toISOString(),
-          read: true,
-        },
-      ]);
-      setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-    }, 1500 + Math.random() * 2000);
   };
 
   return (
@@ -164,7 +123,7 @@ export function AgentChat({ agents }: { agents: AgentLite[] }) {
             <div className="font-medium truncate">{current?.name ?? "Агент"}</div>
             <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
               <motion.span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--success)" }} animate={{ opacity: [1, 0.3, 1], scale: [1, 0.85, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} />
-              {typing ? "печатает…" : "онлайн · realtime"}
+              онлайн · realtime
             </div>
           </div>
           {current && (
@@ -178,6 +137,12 @@ export function AgentChat({ agents }: { agents: AgentLite[] }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
+          {messages.length === 0 && (
+            <div className="m-auto text-center py-10">
+              <p className="text-sm muted">Нет сообщений</p>
+              <p className="text-xs muted mt-1">Напишите агенту первым</p>
+            </div>
+          )}
           <AnimatePresence initial={false}>
             {messages.map((m) => (
               <motion.div
@@ -204,13 +169,6 @@ export function AgentChat({ agents }: { agents: AgentLite[] }) {
               </motion.div>
             ))}
           </AnimatePresence>
-          {typing && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="self-start flex gap-1 px-4 py-3 rounded-3xl" style={{ background: "rgba(var(--surface),0.8)" }}>
-              {[0, 1, 2].map((i) => (
-                <motion.span key={i} className="w-1.5 h-1.5 rounded-full bg-current opacity-60" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.15 }} />
-              ))}
-            </motion.div>
-          )}
           <div ref={endRef} />
         </div>
 

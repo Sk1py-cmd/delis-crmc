@@ -50,7 +50,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <LiveClock name={session?.name ?? "Отабек"} />
+      <LiveClock name={session?.name ?? ""} />
 
       <div className="grid gap-[var(--gap)] md:grid-cols-4">
         {[

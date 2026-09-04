@@ -8,7 +8,7 @@ import { ACTION_POLICY, DENY_MESSAGE } from "@/shared/config/actions";
 import { getSessionUser, canManageUsers, revokeUserSessions, currentSessionToken } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
 import { generateSecret, otpauthUrl, verifyTotp } from "@/server/totp";
-import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
+import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetOperationalData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -494,9 +494,9 @@ export async function POST(req: NextRequest) {
         await saveMiniAppBanners(banners, user.name);
         return NextResponse.json({ ok: true, count: banners.length });
       }
-      case "resetDemoData": {
-        if (user.role !== "owner") return NextResponse.json({ error: "Только Owner может очистить данные" }, { status: 403 });
-        await resetDemoData(user.name, Boolean(d.keepSettings ?? true));
+      case "resetOperationalData": {
+        if (user.role !== "owner") return NextResponse.json({ error: "Только Owner может сбросить данные" }, { status: 403 });
+        await resetOperationalData(user.name, Boolean(d.keepSettings ?? true));
         return NextResponse.json({ ok: true });
       }
       case "sendPush": {

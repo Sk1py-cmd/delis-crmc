@@ -34,13 +34,6 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
   const nextMode = mode === "dark" ? "light" : mode === "light" ? "auto" : "dark";
   const ModeIcon = mode === "dark" ? Moon : mode === "light" ? Sun : MonitorSmartphone;
 
-  const NOTIFS = [
-    { title: t("topbar.notif1title"), body: t("topbar.notif1body"), color: "#22c55e" },
-    { title: t("topbar.notif2title"), body: t("topbar.notif2body"), color: "#f97316" },
-    { title: t("topbar.notif3title"), body: t("topbar.notif3body"), color: "#3b82f6" },
-    { title: t("topbar.notif4title"), body: t("topbar.notif4body"), color: "#8b5cf6" },
-  ];
-
   // Живая лента: новые события приходят по SSE и всплывают тостом, если
   // панель уведомлений закрыта — так алерт виден без обновления страницы.
   const toast = useToast();
@@ -69,7 +62,7 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
     body: `${a.action} — ${a.entity}`,
     color: "#8b5cf6",
   }));
-  const bellItems = liveNotifs.length > 0 ? liveNotifs : NOTIFS;
+  const bellItems = liveNotifs;
 
   return (
     <>
@@ -168,15 +161,19 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
                     className="glass card-pad absolute right-0 mt-2 w-72 sm:w-80 z-50"
                   >
                     <div className="text-sm font-semibold mb-3">{t("topbar.notifications")}</div>
-                    {bellItems.map((n, i) => (
-                      <motion.div key={n.title + i} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="flex gap-3 py-2.5">
-                        <span className="w-1.5 rounded-full shrink-0" style={{ background: n.color }} />
-                        <div className="min-w-0">
-                          <div className="text-[0.82rem] font-medium truncate">{n.title}</div>
-                          <div className="text-xs muted truncate">{n.body}</div>
-                        </div>
-                      </motion.div>
-                    ))}
+                    {bellItems.length === 0 ? (
+                      <div className="text-xs muted py-3 text-center">{t("topbar.noNotifications")}</div>
+                    ) : (
+                      bellItems.map((n, i) => (
+                        <motion.div key={n.title + i} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="flex gap-3 py-2.5">
+                          <span className="w-1.5 rounded-full shrink-0" style={{ background: n.color }} />
+                          <div className="min-w-0">
+                            <div className="text-[0.82rem] font-medium truncate">{n.title}</div>
+                            <div className="text-xs muted truncate">{n.body}</div>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
                     <Link href="/notifications" className="btn w-full justify-center mt-2" onClick={() => setBell(false)}>
                       {t("topbar.allNotifications")}
                     </Link>
