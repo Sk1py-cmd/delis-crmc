@@ -36,7 +36,7 @@ export const AUTO_TRANSLATIONS: Record<Exclude<Locale, "ru">, Record<string, str
     "Статусы заказов": "Order statuses", "Распределение по воронке": "Pipeline distribution",
     "Активность агентов": "Agent activity", "CRM агентов": "Agents CRM",
     "Последние сообщения": "Recent messages", "Открыть чат": "Open chat",
-    "активны": "active", "сум": "UZS", "шт": "pcs", "продаж": "sold",
+    "активны": "active", "сум": "UZS", "шт": "pcs", "продаж": "sold", "за 30 дней": "last 30 days",
   },
   uz: {
     "Добро пожаловать в DELIS 👋": "DELIS'ga xush kelibsiz 👋",
@@ -69,6 +69,6 @@ export const AUTO_TRANSLATIONS: Record<Exclude<Locale, "ru">, Record<string, str
     "Статусы заказов": "Buyurtma holatlari", "Распределение по воронке": "Voronka bo'yicha taqsimot",
     "Активность агентов": "Agentlar faolligi", "CRM агентов": "Agentlar CRM",
     "Последние сообщения": "So'nggi xabarlar", "Открыть чат": "Chatni ochish",
-    "активны": "faol", "сум": "so'm", "шт": "dona", "продаж": "sotilgan",
+    "активны": "faol", "сум": "so'm", "шт": "dona", "продаж": "sotilgan", "за 30 дней": "so'nggi 30 kun",
   },
 };
