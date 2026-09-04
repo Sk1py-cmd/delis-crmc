@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Card, PageHeader, Badge, Modal, Avatar } from "@/shared/ui/kit";
 import { useTheme, PRESET_PRIMARY, ThemeMode, Density } from "@/shared/store/theme";
 import {
-  Moon, Sun, MonitorSmartphone, RotateCcw, User, Lock, BellRing,
+  Moon, Sun, MonitorSmartphone, RotateCcw, User, Lock, BellRing, Bell,
   KeyRound, Eye, EyeOff, LogOut, Send, Smartphone, CheckCircle2, Pencil,
 } from "lucide-react";
 import { useToast } from "@/shared/ui/Toast";
@@ -16,6 +16,7 @@ import { ROLE_LABEL } from "@/shared/lib/format";
 import { useT } from "@/shared/i18n/useT";
 import { useLocale } from "@/shared/store/locale";
 import { LOCALES, type Locale } from "@/shared/i18n/locales";
+import { subscribeToPush, unsubscribeFromPush, pushClientState } from "@/shared/lib/browserPush";
 import { Languages } from "lucide-react";
 
 const MODES: { key: ThemeMode; label: string; icon: typeof Moon }[] = [
@@ -43,7 +44,12 @@ export interface TelegramState {
   chatId: string;
 }
 
-export function SettingsClient({ user, telegram }: { user: SettingsUser; telegram: TelegramState }) {
+export interface PushState {
+  enabled: boolean;
+  publicKey: string;
+}
+
+export function SettingsClient({ user, telegram, push }: { user: SettingsUser; telegram: TelegramState; push: PushState }) {
   const t = useTheme();
   const tt = useT();
   const { locale, setLocale } = useLocale();
@@ -62,6 +68,43 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
   const [tgToken, setTgToken] = useState("");
   const [editToken, setEditToken] = useState(!telegram.tokenSet);
   const [tgTestResult, setTgTestResult] = useState<string | null>(null);
+
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  // Состояние браузерной подписки читаем на клиенте: сервер знает только
+  // факт настройки VAPID, а подписан ли именно этот браузер — знает сам браузер.
+  useEffect(() => {
+    let alive = true;
+    pushClientState().then((st) => {
+      if (!alive) return;
+      setPushSupported(st.supported);
+      setPushSubscribed(st.enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    const err = await subscribeToPush(push.publicKey);
+    if (err) toast(err, "err");
+    else {
+      toast("Push-уведомления включены");
+      setPushSubscribed(true);
+    }
+    setPushBusy(false);
+  };
+
+  const disablePush = async () => {
+    setPushBusy(true);
+    await unsubscribeFromPush();
+    setPushSubscribed(false);
+    toast("Push-уведомления выключены");
+    setPushBusy(false);
+  };
 
   const testTelegram = async () => {
     if (!tgToken.trim()) { toast("Введите токен бота для проверки", "err"); return; }
@@ -283,6 +326,41 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
               <Send size={14} /> {busy ? tt("settings.connecting") : telegram.enabled ? tt("settings.updateNotif") : tt("settings.connectNotif")}
             </button>
           </div>
+        </Card>
+
+        {/* ─── Браузерные push-уведомления ─── */}
+        <Card>
+          <h3 className="font-semibold mb-1 flex items-center gap-2">
+            <Bell size={17} color="var(--success)" /> Push-уведомления
+          </h3>
+          <p className="text-xs muted mb-4">Мгновенные уведомления браузера о новых заказах и событиях CRM — даже когда вкладка закрыта.</p>
+
+          {!push.enabled ? (
+            <div className="rounded-2xl p-3 mb-3" style={{ background: "color-mix(in srgb, #f97316 12%, transparent)", border: "1px solid color-mix(in srgb, #f97316 32%, transparent)" }}>
+              <p className="text-xs">Push не настроен на сервере: задайте VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY и VAPID_SUBJECT.</p>
+            </div>
+          ) : !pushSupported ? (
+            <div className="rounded-2xl p-3 mb-3" style={{ background: "color-mix(in srgb, #ef4444 12%, transparent)", border: "1px solid color-mix(in srgb, #ef4444 32%, transparent)" }}>
+              <p className="text-xs">Этот браузер не поддерживает push-уведомления (нужен HTTPS и service worker).</p>
+            </div>
+          ) : pushSubscribed ? (
+            <>
+              <div className="rounded-2xl p-3 mb-3 flex items-center gap-2" style={{ background: "color-mix(in srgb, #22c55e 12%, transparent)", border: "1px solid color-mix(in srgb, #22c55e 32%, transparent)" }}>
+                <CheckCircle2 size={15} color="#22c55e" />
+                <span className="text-xs">Уведомления включены для этого браузера</span>
+              </div>
+              <button className="btn justify-center" disabled={pushBusy} onClick={disablePush}>
+                Выключить уведомления
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs muted mb-3">Нажмите кнопку — браузер запросит разрешение на уведомления.</p>
+              <button className="btn btn-primary justify-center" disabled={pushBusy} onClick={enablePush}>
+                <BellRing size={14} /> {pushBusy ? "Подключаем…" : "Включить уведомления"}
+              </button>
+            </>
+          )}
         </Card>
 
         {/* ─── Тема ─── */}

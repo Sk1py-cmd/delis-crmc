@@ -4,6 +4,7 @@ import { ensureSeed, syncNumberSequences } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 import { canAccess } from "@/shared/config/nav";
 import { statusMeta } from "@/shared/lib/format";
+import { sendPushToAll } from "@/server/webpush";
 
 
 /** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
@@ -959,6 +960,13 @@ export async function createOrderQuick(customerId: number, productId: number, qt
   // Отправляем уведомление владельцу в Telegram
   await notifyOwnerAboutOrder(order.number, String(total), payment, p.name);
 
+  // И браузерный push всем подписавшимся сотрудникам.
+  await sendPushToAll({
+    title: `Новый заказ ${order.number}`,
+    body: `Сумма: ${total} сум · Оплата: ${payment}`,
+    url: `/orders/${order.id}`,
+  }).catch(() => {});
+
   return order;
 }
 
@@ -1007,6 +1015,13 @@ export async function createMultiOrder(customerId: number, items: { productId: n
 
   await recordSyncEvent({ source: "crm", target: "telegram_bot", entity: "order", action: "order_created", payload: { order: order.number, customerId, items: items.length } });
   await recordSyncEvent({ source: "crm", target: "finance", entity: "order", action: "revenue_planned", payload: { order: order.number, total } });
+
+  await sendPushToAll({
+    title: `Новый заказ ${order.number}`,
+    body: `Сумма: ${total} сум · Позиций: ${items.length}`,
+    url: `/orders/${order.id}`,
+  }).catch(() => {});
+
   return order;
 }
 

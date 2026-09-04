@@ -95,6 +95,24 @@ Server-Sent Events (`/api/events`): новые записи журнала де�
 без перезагрузки страницы. Выбран SSE, а не WebSocket, — это обычный route
 handler Next.js, который работает на Vercel без отдельного сервера.
 
+## Push-уведомления (Web Push)
+
+Сотрудник включает браузерные уведомления в «Настройках»: браузер
+запрашивает разрешение, подписка сохраняется в таблице `push_subscriptions`,
+и новые заказы приходят push-уведомлением даже при закрытой вкладке.
+
+Требует VAPID-ключей:
+
+```bash
+npm run vapid:generate   # выведет VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY
+```
+
+Положите их в переменные окружения `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
+и `VAPID_SUBJECT` (ключи должны быть стабильны между деплоями).
+Шифрование полезной нагрузки и подпись VAPID — библиотека `web-push`
+(каноническая реализация протокола). Обработчики `push`/`notificationclick`
+— в `public/sw.js`.
+
 ## CI
 
 Конфигурация GitHub Actions лежит в `.github/ci.workflow.yml`. Она не

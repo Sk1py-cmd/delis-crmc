@@ -241,6 +241,19 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/** Подписки браузерных push-уведомлений (Web Push API). */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Endpoint push-сервиса уникален для каждой подписки браузера.
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const syncEvents = pgTable("sync_events", {
   id: serial("id").primaryKey(),
   source: text("source").notNull().default("crm"),
