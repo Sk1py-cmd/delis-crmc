@@ -13,14 +13,16 @@ export default async function AnalyticsPage() {
   const orders = Number(a.totals.orders);
   const customers = Number(a.counts.customers);
   const expenses = Number(a.counts.expenses);
-  const marketing = expenses * 0.18;
+  const buyers = Number(a.loyalty.buyers);
+  const repeat = Number(a.loyalty.repeat);
+  const marketing = Number(a.loyalty.marketing);
 
   const kpis = [
     { label: "ROI", value: ((profit / Math.max(expenses, 1)) * 100).toFixed(0) + "%", color: "#22c55e", hint: "Возврат инвестиций" },
-    { label: "LTV", value: money(revenue / Math.max(customers, 1)), color: "#8b5cf6", hint: "Пожизненная ценность" },
-    { label: "CAC", value: money(marketing / Math.max(customers, 1)), color: "#f97316", hint: "Стоимость привлечения" },
+    { label: "LTV", value: money(revenue / Math.max(buyers, 1)), color: "#8b5cf6", hint: "Средняя выручка с покупателя" },
+    { label: "CAC", value: money(marketing / Math.max(customers, 1)), color: "#f97316", hint: "Маркетинг на клиента" },
     { label: "ARPU", value: money(revenue / Math.max(customers, 1)), color: "#3b82f6", hint: "Доход на клиента" },
-    { label: "Retention", value: "68.4%", color: "#14b8a6", hint: "Повторные покупки" },
+    { label: "Retention", value: buyers === 0 ? "—" : ((repeat / buyers) * 100).toFixed(1) + "%", color: "#14b8a6", hint: "Доля повторных покупок" },
     { label: "Конверсия", value: ((Number(a.totals.delivered) / Math.max(orders, 1)) * 100).toFixed(1) + "%", color: "#ec4899", hint: "Заказ → доставка" },
   ];
 

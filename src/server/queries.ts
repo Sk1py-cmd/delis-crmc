@@ -666,8 +666,18 @@ export async function getAnalytics() {
     .select({ name: s.customers.source, value: sql<string>`count(*)` })
     .from(s.customers)
     .groupBy(s.customers.source);
+  // Лояльность и маркетинг для KPI аналитики: считаем по фактам, а не по
+  // константам вёрстки. Покупатели и повторные покупки берутся из заказов —
+  // денормализованные счётчики customers.* обновляются только при сиде.
+  const [loyalty] = await db
+    .select({
+      buyers: sql<string>`(select count(distinct customer_id) from orders where customer_id is not null)`,
+      repeat: sql<string>`(select count(*) from (select customer_id from orders where customer_id is not null group by customer_id having count(*) >= 2) r)`,
+      marketing: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and category = 'marketing')`,
+    })
+    .from(sql`(select 1) t`);
   const topCustomers = await db.select().from(s.customers).orderBy(desc(s.customers.totalSpent)).limit(6);
-  return { ...dash, byCity, bySource, topCustomers };
+  return { ...dash, loyalty, byCity, bySource, topCustomers };
 }
 
 export async function getChatThreads() {
