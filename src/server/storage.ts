@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { extFor } from "./fileExt";
+import { S3StorageDriver } from "./s3";
 
 /**
  * Слой хранения загруженных файлов.
@@ -89,28 +91,6 @@ export interface StorageDriver {
   remove(key: string): Promise<void>;
 }
 
-/** Расширения по MIME для файлов, которые принимает приложение. */
-const EXT_BY_MIME: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "image/avif": ".avif",
-  "video/mp4": ".mp4",
-  "video/webm": ".webm",
-  "video/quicktime": ".mov",
-  "application/pdf": ".pdf",
-};
-
-function extFor(mime: string, originalName: string): string {
-  const known = EXT_BY_MIME[mime];
-  if (known) return known;
-
-  // Берём расширение из имени файла, но только безопасное и короткое.
-  const raw = path.extname(originalName).toLowerCase();
-  return /^\.[a-z0-9]{1,5}$/.test(raw) ? raw : "";
-}
-
 /**
  * Хранение на локальном диске.
  *
@@ -160,4 +140,21 @@ class LocalDiskDriver implements StorageDriver {
   }
 }
 
-export const storage: StorageDriver = new LocalDiskDriver();
+/**
+ * Выбор драйвера по переменной окружения.
+ *
+ * `STORAGE_DRIVER=local` (по умолчанию) — файлы на диске в `UPLOAD_DIR`.
+ * `STORAGE_DRIVER=s3` — объектное хранилище (AWS S3, Cloudflare R2, MinIO);
+ * требует `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` и
+ * `S3_SECRET_ACCESS_KEY`. Ошибка конфигурации всплывает сразу, при старте,
+ * а не при первой загрузке файла.
+ */
+function createStorage(): StorageDriver {
+  const driver = (process.env.STORAGE_DRIVER ?? "local").toLowerCase();
+  if (driver === "s3" || driver === "r2" || driver === "s3-compatible") {
+    return new S3StorageDriver();
+  }
+  return new LocalDiskDriver();
+}
+
+export const storage: StorageDriver = createStorage();
