@@ -251,6 +251,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   endpoint: text("endpoint").notNull().unique(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
+  // Язык интерфейса на момент подписки — чтобы push-уведомления приходили
+  // на языке сотрудника, а не на языке того, кто создал заказ.
+  lang: text("lang").notNull().default("ru"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { ensureSeed } from "@/db/seed";
+import type { Locale } from "@/shared/i18n/locales";
 
 /**
  * Браузерные push-уведомления (Web Push API, RFC 8030 + RFC 8291).
@@ -51,15 +52,20 @@ function ensureConfigured() {
 }
 
 /** Сохраняет (или обновляет) подписку пользователя. Один браузер — одна строка. */
-export async function saveSubscription(userId: number, sub: PushSubscriptionInput): Promise<void> {
+export async function saveSubscription(
+  userId: number,
+  sub: PushSubscriptionInput,
+  lang?: string,
+): Promise<void> {
   await ensureSeed();
   if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return;
+  const safeLang: Locale = lang === "uz" || lang === "en" || lang === "ru" ? lang : "ru";
   await db
     .insert(s.pushSubscriptions)
-    .values({ userId, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth })
+    .values({ userId, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, lang: safeLang })
     .onConflictDoUpdate({
       target: s.pushSubscriptions.endpoint,
-      set: { userId, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      set: { userId, p256dh: sub.keys.p256dh, auth: sub.keys.auth, lang: safeLang },
     });
 }
 
@@ -68,8 +74,18 @@ export async function removeSubscription(userId: number, endpoint: string): Prom
   await db.delete(s.pushSubscriptions).where(eq(s.pushSubscriptions.endpoint, endpoint));
 }
 
+/**
+ * Локализованный вариант payload: ключ — язык интерфейса подписчика.
+ * Отсутствующие языки откатываются на базовый `payload`.
+ */
+export type LocalizedPushPayload = Partial<Record<Locale, PushPayload>>;
+
 /** Отправляет уведомление одному пользователю (все его подписки). */
-export async function sendPushToUser(userId: number, payload: PushPayload): Promise<number> {
+export async function sendPushToUser(
+  userId: number,
+  payload: PushPayload,
+  localized?: LocalizedPushPayload,
+): Promise<number> {
   if (!pushConfigured()) return 0;
   ensureConfigured();
   await ensureSeed();
@@ -77,16 +93,19 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
     .select()
     .from(s.pushSubscriptions)
     .where(eq(s.pushSubscriptions.userId, userId));
-  return sendToSubscriptions(subs, payload);
+  return sendToSubscriptions(subs, payload, localized);
 }
 
 /** Отправляет уведомление всем подписавшимся сотрудникам. */
-export async function sendPushToAll(payload: PushPayload): Promise<number> {
+export async function sendPushToAll(
+  payload: PushPayload,
+  localized?: LocalizedPushPayload,
+): Promise<number> {
   if (!pushConfigured()) return 0;
   ensureConfigured();
   await ensureSeed();
   const subs = await db.select().from(s.pushSubscriptions);
-  return sendToSubscriptions(subs, payload);
+  return sendToSubscriptions(subs, payload, localized);
 }
 
 /**
@@ -95,18 +114,21 @@ export async function sendPushToAll(payload: PushPayload): Promise<number> {
  * разрешение), — такие строки удаляем, чтобы не копить мусор.
  */
 async function sendToSubscriptions(
-  subs: { id: number; endpoint: string; p256dh: string; auth: string }[],
+  subs: { id: number; endpoint: string; p256dh: string; auth: string; lang: string }[],
   payload: PushPayload,
+  localized?: LocalizedPushPayload,
 ): Promise<number> {
   let sent = 0;
   for (const sub of subs) {
+    const lang = (sub.lang === "uz" || sub.lang === "en" ? sub.lang : "ru") as Locale;
+    const message = localized?.[lang] ?? payload;
     try {
       await webpush.sendNotification(
         {
           endpoint: sub.endpoint,
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         },
-        JSON.stringify({ ...payload, url: payload.url ?? "/" }),
+        JSON.stringify({ ...message, url: message.url ?? "/" }),
       );
       sent += 1;
     } catch (e) {

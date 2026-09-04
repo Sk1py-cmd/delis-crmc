@@ -57,15 +57,15 @@ export async function pushClientState(): Promise<PushClientState> {
 
 /**
  * Запрашивает разрешение и подписывает браузер, затем сохраняет подписку
- * на сервере. Возвращает текст ошибки или null при успехе.
+ * на сервере. Возвращает ключ перевода ошибки (для useT) или null при успехе.
  */
-export async function subscribeToPush(publicKey: string): Promise<string | null> {
+export async function subscribeToPush(publicKey: string, lang?: string): Promise<string | null> {
   const reg = await registration();
-  if (!reg || !("pushManager" in reg)) return "Браузер не поддерживает push-уведомления";
-  if (!publicKey) return "Push не настроен на сервере (нет VAPID-ключа)";
+  if (!reg || !("pushManager" in reg)) return "settings.pushUnsupported";
+  if (!publicKey) return "settings.pushNotConfigured";
 
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") return "Разрешение на уведомления не выдано";
+  if (permission !== "granted") return "settings.pushErrPermission";
 
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
@@ -78,9 +78,10 @@ export async function subscribeToPush(publicKey: string): Promise<string | null>
     body: JSON.stringify({
       action: "subscribe",
       subscription: sub.toJSON(),
+      lang,
     }),
   });
-  if (!res.ok) return "Не удалось сохранить подписку на сервере";
+  if (!res.ok) return "settings.pushErrSave";
   return null;
 }
 

@@ -164,7 +164,7 @@ export function LoginScreen() {
           {needs2fa && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
               <div className="rounded-2xl p-3.5 mb-1" style={{ background: "color-mix(in srgb, var(--success) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--success) 30%, transparent)" }}>
-                <p className="text-sm mb-2.5">Введите 6-значный код из приложения-аутентификатора</p>
+                <p className="text-sm mb-2.5">{t("login.otpTitle")}</p>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 muted" />
                   <input
@@ -194,7 +194,7 @@ export function LoginScreen() {
           )}
 
           <motion.button whileTap={{ scale: 0.98 }} className="btn btn-primary justify-center !py-3 mt-1" disabled={loading || (needs2fa && otp.length !== 6)}>
-            {loading ? t("login.submitting") : needs2fa ? "Подтвердить код" : (
+            {loading ? t("login.submitting") : needs2fa ? t("login.otpSubmit") : (
               <>
                 <LogIn size={16} /> {t("login.submit")}
               </>
@@ -203,7 +203,7 @@ export function LoginScreen() {
 
           {needs2fa && (
             <button type="button" className="text-sm muted text-center mt-1 hover:opacity-80 transition-opacity" onClick={() => { setNeeds2fa(false); setOtp(""); }}>
-              ← Вернуться к входу
+              {t("login.otpBack")}
             </button>
           )}
         </form>

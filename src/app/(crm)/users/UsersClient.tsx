@@ -105,7 +105,7 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
   const start2fa = async (u: UserLite) => {
     try {
       const res = (await postManage("setup2fa", { id: u.id })) as { secret?: string; otpauthUrl?: string };
-      if (!res.secret || !res.otpauthUrl) throw new Error("Сервер не вернул секрет 2FA");
+      if (!res.secret || !res.otpauthUrl) throw new Error(tr("users.twoFaServerError"));
       const qr = await QRCode.toDataURL(res.otpauthUrl, { width: 220, margin: 1 });
       setTwoFaFor(u);
       setTwoFaSetup({ secret: res.secret, qr, code: "" });
@@ -118,7 +118,7 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
     if (!twoFaFor || !twoFaSetup) return;
     try {
       await postManage("confirm2fa", { id: twoFaFor.id, secret: twoFaSetup.secret, code: twoFaSetup.code.trim() });
-      toast(`2FA включена для ${twoFaFor.name}`);
+      toast(tr("users.twoFaEnabled").replace("{name}", twoFaFor.name));
       setTwoFaFor(null);
       setTwoFaSetup(null);
       router.refresh();
@@ -128,7 +128,7 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
   };
 
   const disable2fa = (u: UserLite) =>
-    act("toggle2fa", { id: u.id }, `2FA выключена для ${u.name}`);
+    act("toggle2fa", { id: u.id }, tr("users.twoFaDisabled").replace("{name}", u.name));
 
   return (
     <>
@@ -317,16 +317,13 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
         {twoFaFor && twoFaSetup && (
           <Modal open onClose={() => { setTwoFaFor(null); setTwoFaSetup(null); }} title={`2FA: ${twoFaFor.name}`}>
             <div className="flex flex-col items-center gap-4">
-              <p className="text-sm muted text-center">
-                Отсканируйте QR-код приложением-аутентификатором (Google Authenticator, Authy,
-                1Password) или введите ключ вручную, затем подтвердите кодом.
-              </p>
+              <p className="text-sm muted text-center">{tr("users.twoFaSetupDesc")}</p>
               <div className="rounded-2xl p-3" style={{ background: "#fff", border: "1px solid rgba(var(--border))" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={twoFaSetup.qr} alt="QR-код 2FA" width={220} height={220} />
               </div>
               <div className="w-full">
-                <div className="text-xs muted uppercase tracking-wider mb-1">Секретный ключ</div>
+                <div className="text-xs muted uppercase tracking-wider mb-1">{tr("users.twoFaSecretKey")}</div>
                 <code className="block rounded-xl px-3 py-2 text-sm break-all" style={{ background: "rgba(var(--table-row))", border: "1px solid rgba(var(--border))" }}>
                   {twoFaSetup.secret}
                 </code>
@@ -335,7 +332,7 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
                 <Shield size={15} className="absolute left-4 top-1/2 -translate-y-1/2 muted" />
                 <input
                   className="input !pl-11"
-                  placeholder="6-значный код из приложения"
+                  placeholder={tr("users.twoFaCodePlaceholder")}
                   inputMode="numeric"
                   maxLength={6}
                   value={twoFaSetup.code}
@@ -343,11 +340,9 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
                 />
               </div>
               <button className="btn btn-primary justify-center w-full" disabled={twoFaSetup.code.length !== 6} onClick={confirm2fa}>
-                Подтвердить и включить 2FA
+                {tr("users.twoFaConfirm")}
               </button>
-              <p className="text-xs muted text-center">
-                Защита включится только после проверки кода — без него сотрудник не останется без доступа.
-              </p>
+              <p className="text-xs muted text-center">{tr("users.twoFaSafety")}</p>
             </div>
           </Modal>
         )}

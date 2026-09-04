@@ -32,6 +32,19 @@ export const nextOrderNumber = () => nextNumber("order_number_seq", "DLS-");
 export const nextPurchaseOrderNumber = () => nextNumber("purchase_order_number_seq", "PO-");
 export const nextSku = () => nextNumber("product_sku_seq", "DLS-");
 
+/** Название способа оплаты на трёх языках — для push-уведомлений сотрудникам. */
+function pushPaymentLabel(payment: string): { ru: string; uz: string; en: string } {
+  const labels: Record<string, { ru: string; uz: string; en: string }> = {
+    cash: { ru: "Наличные", uz: "Naqd", en: "Cash" },
+    click: { ru: "Click", uz: "Click", en: "Click" },
+    payme: { ru: "Payme", uz: "Payme", en: "Payme" },
+    uzum: { ru: "Uzum", uz: "Uzum", en: "Uzum" },
+    bank: { ru: "Банк", uz: "Bank", en: "Bank" },
+    crm: { ru: "CRM", uz: "CRM", en: "CRM" },
+  };
+  return labels[payment] ?? { ru: payment, uz: payment, en: payment };
+}
+
 
 export type Product = typeof s.products.$inferSelect;
 export type Order = typeof s.orders.$inferSelect;
@@ -960,12 +973,20 @@ export async function createOrderQuick(customerId: number, productId: number, qt
   // Отправляем уведомление владельцу в Telegram
   await notifyOwnerAboutOrder(order.number, String(total), payment, p.name);
 
-  // И браузерный push всем подписавшимся сотрудникам.
-  await sendPushToAll({
-    title: `Новый заказ ${order.number}`,
-    body: `Сумма: ${total} сум · Оплата: ${payment}`,
-    url: `/orders/${order.id}`,
-  }).catch(() => {});
+  // И браузерный push всем подписавшимся сотрудникам — на языке каждого
+  // подписчика (язык хранится в его подписке).
+  const pay = pushPaymentLabel(payment);
+  await sendPushToAll(
+    {
+      title: `Новый заказ ${order.number}`,
+      body: `Сумма: ${total} сум · Оплата: ${pay.ru}`,
+      url: `/orders/${order.id}`,
+    },
+    {
+      uz: { title: `Yangi buyurtma ${order.number}`, body: `Summa: ${total} so'm · To'lov: ${pay.uz}`, url: `/orders/${order.id}` },
+      en: { title: `New order ${order.number}`, body: `Amount: ${total} UZS · Payment: ${pay.en}`, url: `/orders/${order.id}` },
+    },
+  ).catch(() => {});
 
   return order;
 }
@@ -1016,11 +1037,17 @@ export async function createMultiOrder(customerId: number, items: { productId: n
   await recordSyncEvent({ source: "crm", target: "telegram_bot", entity: "order", action: "order_created", payload: { order: order.number, customerId, items: items.length } });
   await recordSyncEvent({ source: "crm", target: "finance", entity: "order", action: "revenue_planned", payload: { order: order.number, total } });
 
-  await sendPushToAll({
-    title: `Новый заказ ${order.number}`,
-    body: `Сумма: ${total} сум · Позиций: ${items.length}`,
-    url: `/orders/${order.id}`,
-  }).catch(() => {});
+  await sendPushToAll(
+    {
+      title: `Новый заказ ${order.number}`,
+      body: `Сумма: ${total} сум · Позиций: ${items.length}`,
+      url: `/orders/${order.id}`,
+    },
+    {
+      uz: { title: `Yangi buyurtma ${order.number}`, body: `Summa: ${total} so'm · Pozitsiyalar: ${items.length}`, url: `/orders/${order.id}` },
+      en: { title: `New order ${order.number}`, body: `Amount: ${total} UZS · Items: ${items.length}`, url: `/orders/${order.id}` },
+    },
+  ).catch(() => {});
 
   return order;
 }

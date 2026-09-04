@@ -3,28 +3,9 @@
 import { useEffect, useRef } from "react";
 import { useLocale } from "@/shared/store/locale";
 import { AUTO_TRANSLATIONS } from "./autoTranslations";
+import { translateText } from "./translateText";
 
 const ATTRS = ["placeholder", "title", "aria-label"] as const;
-
-function translateText(text: string, dict: Record<string, string>): string {
-  const trimmed = text.trim();
-  if (!trimmed) return text;
-
-  // Exact match first
-  if (dict[trimmed]) {
-    return text.replace(trimmed, dict[trimmed]);
-  }
-
-  // Exact whole-word / phrase substitution
-  let next = text;
-  const keys = Object.keys(dict).sort((a, b) => b.length - a.length);
-  for (const key of keys) {
-    if (next.includes(key)) {
-      next = next.replaceAll(key, dict[key]);
-    }
-  }
-  return next;
-}
 
 export function AutoTranslator() {
   const { locale } = useLocale();

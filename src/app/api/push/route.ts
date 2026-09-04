@@ -22,6 +22,8 @@ interface SubscribeBody {
   action: "subscribe" | "unsubscribe";
   subscription?: { endpoint: string; keys: { p256dh: string; auth: string } };
   endpoint?: string;
+  /** Язык интерфейса подписчика (ru | uz | en) для локализованных уведомлений. */
+  lang?: string;
 }
 
 export async function GET() {
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
       return NextResponse.json({ error: "Неполная подписка" }, { status: 400 });
     }
-    await saveSubscription(user.id, sub);
+    await saveSubscription(user.id, sub, body.lang);
     return NextResponse.json({ ok: true });
   }
 
