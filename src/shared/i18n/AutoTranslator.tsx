@@ -3,28 +3,9 @@
 import { useEffect, useRef } from "react";
 import { useLocale } from "@/shared/store/locale";
 import { AUTO_TRANSLATIONS } from "./autoTranslations";
+import { translateText } from "./translateText";
 
 const ATTRS = ["placeholder", "title", "aria-label"] as const;
-
-function translateText(text: string, dict: Record<string, string>): string {
-  const trimmed = text.trim();
-  if (!trimmed) return text;
-
-  // Exact match first
-  if (dict[trimmed]) {
-    return text.replace(trimmed, dict[trimmed]);
-  }
-
-  // Exact whole-word / phrase substitution
-  let next = text;
-  const keys = Object.keys(dict).sort((a, b) => b.length - a.length);
-  for (const key of keys) {
-    if (next.includes(key)) {
-      next = next.replaceAll(key, dict[key]);
-    }
-  }
-  return next;
-}
 
 export function AutoTranslator() {
   const { locale } = useLocale();
@@ -37,11 +18,25 @@ export function AutoTranslator() {
     document.documentElement.lang = locale;
     const dict = locale === "ru" ? null : AUTO_TRANSLATIONS[locale];
 
-    const skip = (el: Element | null) => {
+    // Текстовые узлы не трогаем только в «сырых» контейнерах: пользовательский
+    // ввод (TEXTAREA), код и стили. Текст `<option>` переводим — это видимые
+    // подписи выпадающих списков.
+    const skipText = (el: Element | null) => {
       if (!el) return true;
       const tag = el.tagName;
       return (
-        ["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA", "INPUT", "OPTION", "SELECT"].includes(tag) ||
+        ["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA"].includes(tag) ||
+        el.closest("[data-no-translate]") !== null
+      );
+    };
+
+    // Атрибуты (placeholder/title/aria-label) переводим и у полей ввода:
+    // placeholder не должен оставаться русским в форме на uz/en.
+    const skipAttr = (el: Element | null) => {
+      if (!el) return true;
+      const tag = el.tagName;
+      return (
+        ["SCRIPT", "STYLE", "CODE", "PRE"].includes(tag) ||
         el.closest("[data-no-translate]") !== null
       );
     };
@@ -57,7 +52,7 @@ export function AutoTranslator() {
         while ((node = walker.nextNode())) nodes.push(node as Text);
 
         for (const textNode of nodes) {
-          if (skip(textNode.parentElement)) continue;
+          if (skipText(textNode.parentElement)) continue;
           const current = textNode.nodeValue ?? "";
           if (!originalRef.current.has(textNode)) {
             originalRef.current.set(textNode, current);
@@ -71,7 +66,7 @@ export function AutoTranslator() {
 
         const elements = document.querySelectorAll<HTMLElement>("*");
         for (const el of elements) {
-          if (skip(el)) continue;
+          if (skipAttr(el)) continue;
           let originals = attrOriginalRef.current.get(el);
           if (!originals) {
             originals = new Map<string, string>();

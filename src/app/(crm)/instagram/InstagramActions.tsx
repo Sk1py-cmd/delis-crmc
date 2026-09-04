@@ -21,7 +21,7 @@ export function InstagramActions() {
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     type: "post",
-    caption: "💜 Новинка от DELIS!\n\nПрофессиональная автохимия для идеального блеска.\n\n#delis #автохимия #ташкент",
+    caption: "",
     scheduledAt: "",
   });
   const [media, setMedia] = useState<MediaFile[]>([]);

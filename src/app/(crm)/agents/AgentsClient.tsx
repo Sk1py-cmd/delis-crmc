@@ -97,19 +97,19 @@ export function AgentsClient({
   });
 
   const [visitForm, setVisitForm] = useState({
-    storeName: "Автомойка LUX Чиланзар",
-    storeAddress: "г. Ташкент, ул. Бунёдкор, 24",
-    gpsCoords: "41.2858, 69.2035",
+    storeName: "",
+    storeAddress: "",
+    gpsCoords: "",
     status: "order_placed",
-    orderTotal: "450000",
-    notes: "Проверена выкладка автохимии DELIS, заказано 10 шампуней и керамический воск",
+    orderTotal: "",
+    notes: "",
     photos: [] as string[],
   });
 
   const [orderForm, setOrderForm] = useState({
-    storeName: "Детейлинг центр Prestige",
-    storeAddress: "г. Ташкент, ул. Нукусская, 88",
-    notes: "Срочная поставка автошампуня и воска для кузова",
+    storeName: "",
+    storeAddress: "",
+    notes: "",
     items: [] as { productId: number; qty: number }[],
   });
 
@@ -155,11 +155,11 @@ export function AgentsClient({
       toast(`Визит торговой точки «${visitForm.storeName}» и фотоотчёт сохранены`);
       setVisitModal(false);
       setVisitForm({
-        storeName: "Автомойка LUX Чиланзар",
-        storeAddress: "г. Ташкент, ул. Бунёдкор, 24",
-        gpsCoords: "41.2858, 69.2035",
+        storeName: "",
+        storeAddress: "",
+        gpsCoords: "",
         status: "order_placed",
-        orderTotal: "450000",
+        orderTotal: "",
         notes: "",
         photos: [],
       });
@@ -188,8 +188,8 @@ export function AgentsClient({
       toast(`B2B заказ от торговой точки «${orderForm.storeName}» успешно оформлен!`);
       setStoreOrderModal(false);
       setOrderForm({
-        storeName: "Детейлинг центр Prestige",
-        storeAddress: "г. Ташкент, ул. Нукусская, 88",
+        storeName: "",
+        storeAddress: "",
         notes: "",
         items: [],
       });
@@ -568,7 +568,7 @@ export function AgentsClient({
                 <label className="text-xs muted uppercase tracking-wider block mb-1">Название торговой точки</label>
                 <input
                   className="input"
-                  placeholder="Автомойка LUX Чиланзар"
+                  placeholder=""
                   value={visitForm.storeName}
                   onChange={(e) => setVisitForm({ ...visitForm, storeName: e.target.value })}
                 />
@@ -580,7 +580,7 @@ export function AgentsClient({
                 <label className="text-xs muted uppercase tracking-wider block mb-1">Адрес торговой точки</label>
                 <input
                   className="input"
-                  placeholder="г. Ташкент, ул. Бунёдкор, 24"
+                  placeholder=""
                   value={visitForm.storeAddress}
                   onChange={(e) => setVisitForm({ ...visitForm, storeAddress: e.target.value })}
                 />
@@ -708,7 +708,7 @@ export function AgentsClient({
                 <label className="text-xs muted uppercase tracking-wider block mb-1">Название торговой точки</label>
                 <input
                   className="input"
-                  placeholder="Детейлинг центр Prestige"
+                  placeholder=""
                   value={orderForm.storeName}
                   onChange={(e) => setOrderForm({ ...orderForm, storeName: e.target.value })}
                 />
@@ -719,7 +719,7 @@ export function AgentsClient({
               <label className="text-xs muted uppercase tracking-wider block mb-1">Адрес торговой точки</label>
               <input
                 className="input"
-                placeholder="г. Ташкент, ул. Нукусская, 88"
+                placeholder=""
                 value={orderForm.storeAddress}
                 onChange={(e) => setOrderForm({ ...orderForm, storeAddress: e.target.value })}
               />
@@ -816,7 +816,7 @@ export function AgentsClient({
               <label className="text-xs muted uppercase tracking-wider block mb-1">Комментарий к заказу</label>
               <input
                 className="input"
-                placeholder="Срочная поставка автошампуня и воска для кузова"
+                placeholder=""
                 value={orderForm.notes}
                 onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
               />

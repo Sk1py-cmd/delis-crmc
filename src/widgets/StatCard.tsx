@@ -10,7 +10,8 @@ export interface Stat {
   label: string;
   value: number;
   suffix?: string;
-  delta?: number;
+  /** null — изменение не вычислено (нет базы для сравнения), дельта не показывается */
+  delta?: number | null;
   color: string;
   icon?: string;
   mode?: "compact" | "num";

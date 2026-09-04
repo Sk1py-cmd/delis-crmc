@@ -45,7 +45,7 @@ export function SeoForm({ initial }: { initial: Record<string, string> }) {
     { key: "description", label: "Meta Description", placeholder: "Каталог DELIS: автошампуни, воски…" },
     { key: "ogImage", label: "OG Image URL", placeholder: "og-delis-2026.jpg · 1200×630" },
     { key: "robots", label: "Robots.txt", placeholder: "User-agent: * / Allow: /" },
-    { key: "sitemap", label: "Sitemap.xml", placeholder: "148 URL · обновляется автоматически" },
+    { key: "sitemap", label: "Sitemap.xml", placeholder: "Генерируется автоматически" },
     { key: "canonical", label: "Canonical URL", placeholder: "https://delis.uz" },
   ];
 

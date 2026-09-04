@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/server/auth";
 import { getIntegrations } from "@/server/queries";
+import { pushConfigured, vapidPublicKey } from "@/server/webpush";
 import { SettingsClient } from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,10 @@ export default async function SettingsPage() {
         enabled: Boolean(tg?.enabled && creds.ownerChatId),
         tokenSet: Boolean(creds.token),
         chatId: creds.ownerChatId ?? "",
+      }}
+      push={{
+        enabled: pushConfigured(),
+        publicKey: vapidPublicKey(),
       }}
     />
   );

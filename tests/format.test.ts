@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compact, money, num, statusMeta, dt, dateOnly, timeOnly } from "@/shared/lib/format";
+import { compact, money, num, pctChange, statusMeta, dt, dateOnly, timeOnly } from "@/shared/lib/format";
 
 /** В ru-RU разделитель разрядов — неразрывный пробел, сравниваем без него. */
 const plain = (s: string) => s.replace(/\u00a0|\u202f/g, " ");
@@ -59,6 +59,27 @@ describe("num", () => {
 
   it("пустое значение превращает в 0", () => {
     expect(num("")).toBe("0");
+  });
+});
+
+describe("pctChange", () => {
+  it("считает рост и падение с округлением до десятых", () => {
+    expect(pctChange(110, 100)).toBe(10);
+    expect(pctChange(100, 110)).toBe(-9.1);
+    expect(pctChange(1234, 1000)).toBe(23.4);
+  });
+
+  it("принимает строки из БД", () => {
+    expect(pctChange("150", "100")).toBe(50);
+  });
+
+  it("возвращает null, когда база сравнения отсутствует или равна нулю", () => {
+    expect(pctChange(100, 0)).toBeNull();
+    expect(pctChange(100, "")).toBeNull();
+  });
+
+  it("считает пустое текущее значение нулём (полный спад)", () => {
+    expect(pctChange("", "100")).toBe(-100);
   });
 });
 

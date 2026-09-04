@@ -12,7 +12,6 @@ import {
   Users,
   Sparkles,
   DollarSign,
-  Target,
   BarChart3,
   Calendar,
 } from "lucide-react";
@@ -449,36 +448,6 @@ export function MarketingClient({
               ))}
             </div>
           </Card>
-
-          <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <Target size={18} color="var(--primary)" />
-              <h3 className="font-semibold">Эффективность триггеров</h3>
-            </div>
-            <p className="text-sm muted leading-relaxed">
-              Автоматические воронки возвращают до 28% клиентов с брошенными заказами и увеличивают повторные покупки.
-            </p>
-            <div className="mt-4 flex flex-col gap-3">
-              <div
-                className="rounded-2xl p-3"
-                style={{ background: "rgba(var(--table-row))" }}
-              >
-                <div className="text-xs muted">Возврат брошенных корзин</div>
-                <div className="text-lg font-bold mt-1 text-green-500">
-                  +184 заказа
-                </div>
-              </div>
-              <div
-                className="rounded-2xl p-3"
-                style={{ background: "rgba(var(--table-row))" }}
-              >
-                <div className="text-xs muted">Реактивация спящих клиентов</div>
-                <div className="text-lg font-bold mt-1 text-purple-400">
-                  +96 повторных покупок
-                </div>
-              </div>
-            </div>
-          </Card>
         </div>
       )}
 
@@ -533,9 +502,6 @@ export function MarketingClient({
               <TrendingUp size={18} color="var(--accent)" />
               <h3 className="font-semibold">Сравнение окупаемости</h3>
             </div>
-            <p className="text-sm muted mb-4">
-              Самую высокую рентабельность показывают рекомендации агентов B2B (695%) и Telegram Mini App (584%).
-            </p>
             <Bars
               data={adChannels.map((c) => ({
                 name: c.name.split(" ")[0],

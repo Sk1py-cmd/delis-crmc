@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -13,6 +13,8 @@ import { useKeyboardShortcuts } from "@/shared/lib/keyboard";
 import { useT } from "@/shared/i18n/useT";
 import { LOCALES, type Locale } from "@/shared/i18n/locales";
 import { useLocale } from "@/shared/store/locale";
+import { useToast } from "@/shared/ui/Toast";
+import { useLiveNotifications, type LiveActivity } from "@/shared/lib/live";
 
 export function Topbar({ user }: { user: { name: string; login: string; email: string; role: string } }) {
   const [cmd, setCmd] = useState(false);
@@ -32,12 +34,35 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
   const nextMode = mode === "dark" ? "light" : mode === "light" ? "auto" : "dark";
   const ModeIcon = mode === "dark" ? Moon : mode === "light" ? Sun : MonitorSmartphone;
 
-  const NOTIFS = [
-    { title: t("topbar.notif1title"), body: t("topbar.notif1body"), color: "#22c55e" },
-    { title: t("topbar.notif2title"), body: t("topbar.notif2body"), color: "#f97316" },
-    { title: t("topbar.notif3title"), body: t("topbar.notif3body"), color: "#3b82f6" },
-    { title: t("topbar.notif4title"), body: t("topbar.notif4body"), color: "#8b5cf6" },
-  ];
+  // Живая лента: новые события приходят по SSE и всплывают тостом, если
+  // панель уведомлений закрыта — так алерт виден без обновления страницы.
+  const toast = useToast();
+  const bellOpenRef = useRef(false);
+  useEffect(() => {
+    bellOpenRef.current = bell;
+  }, [bell]);
+  const lastToastId = useRef(0);
+  const { items, unread, resetUnread } = useLiveNotifications((item: LiveActivity) => {
+    if (!bellOpenRef.current) {
+      lastToastId.current = item.id;
+      toast(`${item.actor}: ${item.action}`, "ok");
+    }
+  });
+
+  // Тосты на события из снимка не шлём: помечаем его вершину «уже увиденной».
+  useEffect(() => {
+    if (items.length > 0 && lastToastId.current === 0) {
+      lastToastId.current = items[0].id;
+    }
+  }, [items]);
+
+  const liveNotifs = items.slice(0, 6).map((a) => ({
+    id: a.id,
+    title: a.actor,
+    body: `${a.action} — ${a.entity}`,
+    color: "#8b5cf6",
+  }));
+  const bellItems = liveNotifs;
 
   return (
     <>
@@ -117,9 +142,15 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
             </button>
 
             <div className="relative shrink-0">
-              <button className="btn !px-2.5 relative" onClick={() => setBell((v) => !v)}>
+              <button className="btn !px-2.5 relative" onClick={() => { setBell((v) => !v); resetUnread(); }}>
                 <Bell size={17} />
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: "var(--error)" }} />
+                {unread > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[0.65rem] font-bold grid place-items-center text-white" style={{ background: "var(--error)" }}>
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                ) : (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: "var(--error)" }} />
+                )}
               </button>
               <AnimatePresence>
                 {bell && (
@@ -130,15 +161,19 @@ export function Topbar({ user }: { user: { name: string; login: string; email: s
                     className="glass card-pad absolute right-0 mt-2 w-72 sm:w-80 z-50"
                   >
                     <div className="text-sm font-semibold mb-3">{t("topbar.notifications")}</div>
-                    {NOTIFS.map((n, i) => (
-                      <motion.div key={n.title} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="flex gap-3 py-2.5">
-                        <span className="w-1.5 rounded-full shrink-0" style={{ background: n.color }} />
-                        <div className="min-w-0">
-                          <div className="text-[0.82rem] font-medium truncate">{n.title}</div>
-                          <div className="text-xs muted truncate">{n.body}</div>
-                        </div>
-                      </motion.div>
-                    ))}
+                    {bellItems.length === 0 ? (
+                      <div className="text-xs muted py-3 text-center">{t("topbar.noNotifications")}</div>
+                    ) : (
+                      bellItems.map((n, i) => (
+                        <motion.div key={n.title + i} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="flex gap-3 py-2.5">
+                          <span className="w-1.5 rounded-full shrink-0" style={{ background: n.color }} />
+                          <div className="min-w-0">
+                            <div className="text-[0.82rem] font-medium truncate">{n.title}</div>
+                            <div className="text-xs muted truncate">{n.body}</div>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
                     <Link href="/notifications" className="btn w-full justify-center mt-2" onClick={() => setBell(false)}>
                       {t("topbar.allNotifications")}
                     </Link>

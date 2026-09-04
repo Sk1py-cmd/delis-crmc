@@ -11,8 +11,6 @@ type OrdersLite = Awaited<ReturnType<typeof getOrdersLite>>;
  * внутри рендера нарушает правила чистоты React (react-hooks/purity).
  */
 function buildItems(activity: Activity, orders: OrdersLite) {
-  const now = Date.now();
-
   return [
     ...orders.slice(0, 6).map((o) => ({
       id: `o${o.id}`,
@@ -32,24 +30,6 @@ function buildItems(activity: Activity, orders: OrdersLite) {
       color: "#8b5cf6",
       at: String(a.createdAt),
     })),
-    {
-      id: "w1",
-      title: "Низкий остаток на складе",
-      body: "DELIS Glass Cleaner Crystal — 12 шт, ниже минимума",
-      channel: "push",
-      status: "delivered",
-      color: "#f97316",
-      at: new Date(now - 3600e3).toISOString(),
-    },
-    {
-      id: "w2",
-      title: "Агент выполнил план",
-      body: "Шохрух Абдуллаев закрыл месяц на 112%",
-      channel: "email",
-      status: "sent",
-      color: "#3b82f6",
-      at: new Date(now - 7200e3).toISOString(),
-    },
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 

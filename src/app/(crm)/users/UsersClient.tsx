@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { UserPlus, KeyRound, Trash2, ShieldCheck } from "lucide-react";
+import QRCode from "qrcode";
+import { UserPlus, KeyRound, Trash2, ShieldCheck, Shield } from "lucide-react";
 import { Card, Badge, Avatar, Modal, PageHeader } from "@/shared/ui/kit";
 import { ROLE_LABEL, dt } from "@/shared/lib/format";
 import { useToast } from "@/shared/ui/Toast";
@@ -54,6 +55,8 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [matrix, setMatrix] = useState(MATRIX);
+  const [twoFaFor, setTwoFaFor] = useState<UserLite | null>(null);
+  const [twoFaSetup, setTwoFaSetup] = useState<{ secret: string; qr: string; code: string } | null>(null);
   const toast = useToast();
   const tr = useT();
   const router = useRouter();
@@ -95,6 +98,37 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
       toast(e instanceof Error ? e.message : "Ошибка", "err");
     }
   };
+
+  // Шаг 1 включения 2FA: сервер отдаёт новый секрет и otpauth-ссылку,
+  // из которой клиент рисует QR. Секрет ещё не сохранён — сотрудник должен
+  // отсканировать код и подтвердить вход кодом из приложения.
+  const start2fa = async (u: UserLite) => {
+    try {
+      const res = (await postManage("setup2fa", { id: u.id })) as { secret?: string; otpauthUrl?: string };
+      if (!res.secret || !res.otpauthUrl) throw new Error(tr("users.twoFaServerError"));
+      const qr = await QRCode.toDataURL(res.otpauthUrl, { width: 220, margin: 1 });
+      setTwoFaFor(u);
+      setTwoFaSetup({ secret: res.secret, qr, code: "" });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Ошибка", "err");
+    }
+  };
+
+  const confirm2fa = async () => {
+    if (!twoFaFor || !twoFaSetup) return;
+    try {
+      await postManage("confirm2fa", { id: twoFaFor.id, secret: twoFaSetup.secret, code: twoFaSetup.code.trim() });
+      toast(tr("users.twoFaEnabled").replace("{name}", twoFaFor.name));
+      setTwoFaFor(null);
+      setTwoFaSetup(null);
+      router.refresh();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Ошибка", "err");
+    }
+  };
+
+  const disable2fa = (u: UserLite) =>
+    act("toggle2fa", { id: u.id }, tr("users.twoFaDisabled").replace("{name}", u.name));
 
   return (
     <>
@@ -146,7 +180,7 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
                     </td>
                     <td>
                       {canManage ? (
-                        <button onClick={() => act("toggle2fa", { id: u.id }, `2FA ${u.twoFa ? "выключена" : "включена"} для ${u.name}`)}>
+                        <button onClick={() => (u.twoFa ? disable2fa(u) : start2fa(u))}>
                           <Badge color={u.twoFa ? "#22c55e" : "#ef4444"}>{u.twoFa ? "Вкл" : "Выкл"}</Badge>
                         </button>
                       ) : (
@@ -277,6 +311,38 @@ export function UsersClient({ users, currentRole, audit }: { users: UserLite[]; 
               <button className="btn btn-primary justify-center" disabled={busy} onClick={resetPw}>
                 {busy ? "Сохраняем…" : "Сменить пароль"}
               </button>
+            </div>
+          </Modal>
+        )}
+        {twoFaFor && twoFaSetup && (
+          <Modal open onClose={() => { setTwoFaFor(null); setTwoFaSetup(null); }} title={`2FA: ${twoFaFor.name}`}>
+            <div className="flex flex-col items-center gap-4">
+              <p className="text-sm muted text-center">{tr("users.twoFaSetupDesc")}</p>
+              <div className="rounded-2xl p-3" style={{ background: "#fff", border: "1px solid rgba(var(--border))" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={twoFaSetup.qr} alt="QR-код 2FA" width={220} height={220} />
+              </div>
+              <div className="w-full">
+                <div className="text-xs muted uppercase tracking-wider mb-1">{tr("users.twoFaSecretKey")}</div>
+                <code className="block rounded-xl px-3 py-2 text-sm break-all" style={{ background: "rgba(var(--table-row))", border: "1px solid rgba(var(--border))" }}>
+                  {twoFaSetup.secret}
+                </code>
+              </div>
+              <div className="relative w-full">
+                <Shield size={15} className="absolute left-4 top-1/2 -translate-y-1/2 muted" />
+                <input
+                  className="input !pl-11"
+                  placeholder={tr("users.twoFaCodePlaceholder")}
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={twoFaSetup.code}
+                  onChange={(e) => setTwoFaSetup({ ...twoFaSetup, code: e.target.value.replace(/\D/g, "") })}
+                />
+              </div>
+              <button className="btn btn-primary justify-center w-full" disabled={twoFaSetup.code.length !== 6} onClick={confirm2fa}>
+                {tr("users.twoFaConfirm")}
+              </button>
+              <p className="text-xs muted text-center">{tr("users.twoFaSafety")}</p>
             </div>
           </Modal>
         )}

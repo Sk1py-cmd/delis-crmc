@@ -2,7 +2,7 @@ import { getAnalytics } from "@/server/queries";
 import { Card, PageHeader, Badge, Progress, Avatar } from "@/shared/ui/kit";
 import { StatGrid } from "@/widgets/StatCard";
 import { RevenueArea, Bars, Donut, Legend } from "@/shared/ui/charts";
-import { money, num, SOURCE_LABEL, statusMeta } from "@/shared/lib/format";
+import { money, num, pctChange, SOURCE_LABEL, statusMeta } from "@/shared/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +13,16 @@ export default async function AnalyticsPage() {
   const orders = Number(a.totals.orders);
   const customers = Number(a.counts.customers);
   const expenses = Number(a.counts.expenses);
-  const marketing = expenses * 0.18;
+  const buyers = Number(a.loyalty.buyers);
+  const repeat = Number(a.loyalty.repeat);
+  const marketing = Number(a.loyalty.marketing);
 
   const kpis = [
     { label: "ROI", value: ((profit / Math.max(expenses, 1)) * 100).toFixed(0) + "%", color: "#22c55e", hint: "Возврат инвестиций" },
-    { label: "LTV", value: money(revenue / Math.max(customers, 1)), color: "#8b5cf6", hint: "Пожизненная ценность" },
-    { label: "CAC", value: money(marketing / Math.max(customers, 1)), color: "#f97316", hint: "Стоимость привлечения" },
+    { label: "LTV", value: money(revenue / Math.max(buyers, 1)), color: "#8b5cf6", hint: "Средняя выручка с покупателя" },
+    { label: "CAC", value: money(marketing / Math.max(customers, 1)), color: "#f97316", hint: "Маркетинг на клиента" },
     { label: "ARPU", value: money(revenue / Math.max(customers, 1)), color: "#3b82f6", hint: "Доход на клиента" },
-    { label: "Retention", value: "68.4%", color: "#14b8a6", hint: "Повторные покупки" },
+    { label: "Retention", value: buyers === 0 ? "—" : ((repeat / buyers) * 100).toFixed(1) + "%", color: "#14b8a6", hint: "Доля повторных покупок" },
     { label: "Конверсия", value: ((Number(a.totals.delivered) / Math.max(orders, 1)) * 100).toFixed(1) + "%", color: "#ec4899", hint: "Заказ → доставка" },
   ];
 
@@ -30,11 +32,11 @@ export default async function AnalyticsPage() {
 
       <StatGrid
         stats={[
-          { label: "Выручка", value: revenue, color: "#8b5cf6", icon: "💰", delta: 18.4 },
+          { label: "Выручка", value: revenue, color: "#8b5cf6", icon: "💰", delta: pctChange(a.last30.revenue, a.prev30.revenue) },
           { label: "Маржа", value: (profit / Math.max(revenue, 1)) * 100, suffix: "%", color: "#22c55e", icon: "📈", mode: "num" },
-          { label: "Заказы", value: orders, color: "#3b82f6", icon: "🧾", mode: "num", delta: 9.6 },
+          { label: "Заказы", value: orders, color: "#3b82f6", icon: "🧾", mode: "num", delta: pctChange(a.last30.orders, a.prev30.orders) },
           { label: "Средний чек", value: Number(a.totals.avg), color: "#f97316", icon: "🧮" },
-          { label: "Клиенты", value: customers, color: "#ec4899", icon: "👥", mode: "num", delta: 22.5 },
+          { label: "Клиенты", value: customers, color: "#ec4899", icon: "👥", mode: "num", delta: pctChange(customers, a.customers30dAgo) },
           { label: "Отмены", value: Number(a.totals.cancelled), color: "#ef4444", icon: "🚫", mode: "num" },
         ]}
       />

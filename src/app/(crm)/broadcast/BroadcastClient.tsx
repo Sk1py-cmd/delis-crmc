@@ -58,11 +58,11 @@ export function BroadcastClient({
   const [minOrders, setMinOrders] = useState(0);
   const [minSpent, setMinSpent] = useState(0);
   // Сообщение
-  const [text, setText] = useState("Здравствуйте, {имя}! 💜 DELIS: новая акция — скидка 20% на всю авто-химию до конца недели. Промокод DELIS20");
+  const [text, setText] = useState("");
   const [attach, setAttach] = useState<string[]>(["Фото"]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
-  const [promo, setPromo] = useState({ code: "DELIS20", discount: 20 });
+  const [promo, setPromo] = useState({ code: "", discount: 0 });
   // Отправка
   const [channel, setChannel] = useState("telegram");
   const [sendMode, setSendMode] = useState<"now" | "schedule">("now");

@@ -332,27 +332,24 @@ export function AgentPortalClient({
 
   // Состояния форм
   const [visitForm, setVisitForm] = useState({
-    storeName: "Автомойка LUX Чиланзар",
-    storeAddress: "г. Ташкент, ул. Бунёдкор, 24",
-    gpsCoords: "41.2858, 69.2035",
+    storeName: "",
+    storeAddress: "",
+    gpsCoords: "",
     status: "order_placed",
-    orderTotal: "450000",
+    orderTotal: "",
     notes: "",
     photos: [] as string[],
   });
 
   const [checkoutForm, setCheckoutForm] = useState({
-    storeName: "Автомойка LUX Чиланзар",
-    storeAddress: "г. Ташкент, ул. Бунёдкор, 24",
-    notes: "B2B заказ через мобильный каталог DELIS Agent",
+    storeName: "",
+    storeAddress: "",
+    notes: "",
   });
 
   // Чат с офисом
   const [chatText, setText] = useState("");
-  const [chatMsgs, setChatMsgs] = useState([
-    { id: 1, body: "Шохрух, привет! Отличные показатели на этой неделе. Ждём фотоотчёты по новой автохимии.", fromAdmin: true, time: "09:45" },
-    { id: 2, body: "Здравствуйте! Да, уже на точке Чиланзар, приняли крупный заказ на шампунь 5L и керамический воск 👍", fromAdmin: false, time: "10:12" },
-  ]);
+  const [chatMsgs, setChatMsgs] = useState<{ id: number; body: string; fromAdmin: boolean; time: string }[]>([]);
 
   const sendMsg = () => {
     if (!chatText.trim()) return;
@@ -501,11 +498,11 @@ export function AgentPortalClient({
       toast(`✅ ${utr.geolocationSuccess}`);
       setVisitModal(false);
       setVisitForm({
-        storeName: "Автомойка LUX Чиланзар",
-        storeAddress: "г. Ташкент, ул. Бунёдкор, 24",
-        gpsCoords: "41.2858, 69.2035",
+        storeName: "",
+        storeAddress: "",
+        gpsCoords: "",
         status: "order_placed",
-        orderTotal: "450000",
+        orderTotal: "",
         notes: "",
         photos: [],
       });
@@ -831,11 +828,11 @@ export function AgentPortalClient({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold leading-tight">
-                    {agent.route || "Чиланзар — Юнусабад (Автомойки & Детейлинг)"}
+                    {agent.route}
                   </div>
                   <div className="text-[10px] muted mt-1 flex items-center gap-1">
                     <Clock size={10} />
-                    <span>8 запланированных точек · План: {money(Number(agent.plan) / 22)}</span>
+                    <span>План: {money(Number(agent.plan) / 22)}</span>
                   </div>
                 </div>
               </div>
@@ -1288,8 +1285,7 @@ export function AgentPortalClient({
             </div>
 
             <p className="text-xs muted leading-relaxed">
-              {selectedProduct.description ||
-                "Профессиональная автохимия DELIS премиум-класса для автомоек и детейлинг центров."}
+              {selectedProduct?.description ?? ""}
             </p>
 
             <div className="flex items-center justify-between pt-2 border-t border-white/10">
@@ -1323,7 +1319,7 @@ export function AgentPortalClient({
               </label>
               <input
                 className="input !text-xs !rounded-xl"
-                placeholder="Автомойка LUX Чиланзар"
+                placeholder=""
                 value={visitForm.storeName}
                 onChange={(e) => setVisitForm({ ...visitForm, storeName: e.target.value })}
               />
@@ -1335,7 +1331,7 @@ export function AgentPortalClient({
               </label>
               <input
                 className="input !text-xs !rounded-xl"
-                placeholder="г. Ташкент, ул. Бунёдкор, 24"
+                placeholder=""
                 value={visitForm.storeAddress}
                 onChange={(e) => setVisitForm({ ...visitForm, storeAddress: e.target.value })}
               />
@@ -1516,7 +1512,7 @@ export function AgentPortalClient({
               </label>
               <input
                 className="input !text-xs !rounded-xl"
-                placeholder="Автомойка LUX Чиланзар"
+                placeholder=""
                 value={checkoutForm.storeName}
                 onChange={(e) => setCheckoutForm({ ...checkoutForm, storeName: e.target.value })}
               />
@@ -1528,7 +1524,7 @@ export function AgentPortalClient({
               </label>
               <input
                 className="input !text-xs !rounded-xl"
-                placeholder="г. Ташкент, ул. Бунёдкор, 24"
+                placeholder=""
                 value={checkoutForm.storeAddress}
                 onChange={(e) => setCheckoutForm({ ...checkoutForm, storeAddress: e.target.value })}
               />
@@ -1540,7 +1536,7 @@ export function AgentPortalClient({
               </label>
               <textarea
                 className="input !text-xs min-h-16 !rounded-2xl"
-                placeholder="Оплата по перечислению, доставка завтра утром..."
+                placeholder=""
                 value={checkoutForm.notes}
                 onChange={(e) => setCheckoutForm({ ...checkoutForm, notes: e.target.value })}
               />

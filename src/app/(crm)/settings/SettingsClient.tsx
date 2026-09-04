@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Card, PageHeader, Badge, Modal, Avatar } from "@/shared/ui/kit";
 import { useTheme, PRESET_PRIMARY, ThemeMode, Density } from "@/shared/store/theme";
 import {
-  Moon, Sun, MonitorSmartphone, RotateCcw, User, Lock, BellRing,
+  Moon, Sun, MonitorSmartphone, RotateCcw, User, Lock, BellRing, Bell,
   KeyRound, Eye, EyeOff, LogOut, Send, Smartphone, CheckCircle2, Pencil,
 } from "lucide-react";
 import { useToast } from "@/shared/ui/Toast";
@@ -16,6 +16,7 @@ import { ROLE_LABEL } from "@/shared/lib/format";
 import { useT } from "@/shared/i18n/useT";
 import { useLocale } from "@/shared/store/locale";
 import { LOCALES, type Locale } from "@/shared/i18n/locales";
+import { subscribeToPush, unsubscribeFromPush, pushClientState } from "@/shared/lib/browserPush";
 import { Languages } from "lucide-react";
 
 const MODES: { key: ThemeMode; label: string; icon: typeof Moon }[] = [
@@ -43,7 +44,12 @@ export interface TelegramState {
   chatId: string;
 }
 
-export function SettingsClient({ user, telegram }: { user: SettingsUser; telegram: TelegramState }) {
+export interface PushState {
+  enabled: boolean;
+  publicKey: string;
+}
+
+export function SettingsClient({ user, telegram, push }: { user: SettingsUser; telegram: TelegramState; push: PushState }) {
   const t = useTheme();
   const tt = useT();
   const { locale, setLocale } = useLocale();
@@ -63,66 +69,103 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
   const [editToken, setEditToken] = useState(!telegram.tokenSet);
   const [tgTestResult, setTgTestResult] = useState<string | null>(null);
 
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  // Состояние браузерной подписки читаем на клиенте: сервер знает только
+  // факт настройки VAPID, а подписан ли именно этот браузер — знает сам браузер.
+  useEffect(() => {
+    let alive = true;
+    pushClientState().then((st) => {
+      if (!alive) return;
+      setPushSupported(st.supported);
+      setPushSubscribed(st.enabled);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    const err = await subscribeToPush(push.publicKey, locale);
+    if (err) toast(tt(err), "err");
+    else {
+      toast(tt("settings.pushEnabledToast"));
+      setPushSubscribed(true);
+    }
+    setPushBusy(false);
+  };
+
+  const disablePush = async () => {
+    setPushBusy(true);
+    await unsubscribeFromPush();
+    setPushSubscribed(false);
+    toast(tt("settings.pushDisabledToast"));
+    setPushBusy(false);
+  };
+
   const testTelegram = async () => {
-    if (!tgToken.trim()) { toast("Введите токен бота для проверки", "err"); return; }
+    if (!tgToken.trim()) { toast(tt("settings.tgTokenEmpty"), "err"); return; }
     setBusy(true);
     setTgTestResult(null);
     try {
       const res = await postManage("testTelegram", { token: tgToken.trim() });
       const r = res as { username?: string; name?: string };
-      setTgTestResult(`✅ Бот найден: @${r.username} (${r.name})`);
+      setTgTestResult(`✅ ${tt("settings.tgBotFound").replace("{username}", r.username ?? "").replace("{name}", r.name ?? "")}`);
     } catch (e) {
-      setTgTestResult(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
+      setTgTestResult(`❌ ${e instanceof Error ? e.message : tt("common.error")}`);
     }
     setBusy(false);
   };
 
   const saveTgNotifications = async () => {
-    if (!tgChatId.trim()) { toast("Укажите ваш Telegram Chat ID", "err"); return; }
-    if (!telegram.tokenSet && !tgToken.trim()) { toast("Укажите токен бота", "err"); return; }
+    if (!tgChatId.trim()) { toast(tt("settings.tgChatIdEmpty"), "err"); return; }
+    if (!telegram.tokenSet && !tgToken.trim()) { toast(tt("settings.tgTokenRequired"), "err"); return; }
     setBusy(true);
     try {
       await postManage("setupOrderNotifications", { chatId: tgChatId.trim(), token: tgToken.trim() });
-      toast("Уведомления подключены — тестовое сообщение отправлено в Telegram");
+      toast(tt("settings.tgConnectedToast"));
       setTgToken("");
       setEditToken(false);
       router.refresh();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Ошибка", "err");
+      toast(e instanceof Error ? e.message : tt("common.error"), "err");
     }
     setBusy(false);
   };
 
   const changePassword = async () => {
-    if (!currentPw.trim() || !newPw.trim()) { toast("Заполните оба поля", "err"); return; }
-    if (newPw.length < 4) { toast("Пароль минимум 4 символа", "err"); return; }
+    if (!currentPw.trim() || !newPw.trim()) { toast(tt("settings.passwordFieldsRequired"), "err"); return; }
+    if (newPw.length < 4) { toast(tt("settings.passwordTooShort"), "err"); return; }
     setBusy(true);
     try {
       await postManage("changePassword", { currentPassword: currentPw, newPassword: newPw });
-      toast("Пароль изменён. Используйте его при следующем входе");
+      toast(tt("settings.passwordChangedToast"));
       setPwModal(false);
       setCurrentPw("");
       setNewPw("");
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Ошибка", "err");
+      toast(e instanceof Error ? e.message : tt("common.error"), "err");
     }
     setBusy(false);
   };
 
   const changeLogin = async () => {
     const v = newLogin.trim().toLowerCase();
-    if (!/^[a-z0-9._-]{3,24}$/.test(v)) { toast("Логин: 3–24 символа, латиница/цифры/точка/дефис", "err"); return; }
-    if (v === user.login) { toast("Это ваш текущий логин", "err"); return; }
-    if (!currentPw.trim()) { toast("Введите текущий пароль для подтверждения", "err"); return; }
+    if (!/^[a-z0-9._-]{3,24}$/.test(v)) { toast(tt("settings.loginFormatInvalid"), "err"); return; }
+    if (v === user.login) { toast(tt("settings.loginSameToast"), "err"); return; }
+    if (!currentPw.trim()) { toast(tt("settings.loginConfirmPassword"), "err"); return; }
     setBusy(true);
     try {
       await postManage("changeLogin", { newLogin: v, currentPassword: currentPw });
-      toast(`Логин изменён на @${v}. Входите с новым логином`);
+      toast(tt("settings.loginChangedToast").replace("{login}", v));
       setLoginModal(false);
       setCurrentPw("");
       router.refresh();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Ошибка", "err");
+      toast(e instanceof Error ? e.message : tt("common.error"), "err");
     }
     setBusy(false);
   };
@@ -285,6 +328,41 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
           </div>
         </Card>
 
+        {/* ─── Браузерные push-уведомления ─── */}
+        <Card>
+          <h3 className="font-semibold mb-1 flex items-center gap-2">
+            <Bell size={17} color="var(--success)" /> {tt("settings.pushTitle")}
+          </h3>
+          <p className="text-xs muted mb-4">{tt("settings.pushDesc")}</p>
+
+          {!push.enabled ? (
+            <div className="rounded-2xl p-3 mb-3" style={{ background: "color-mix(in srgb, #f97316 12%, transparent)", border: "1px solid color-mix(in srgb, #f97316 32%, transparent)" }}>
+              <p className="text-xs">{tt("settings.pushNotConfigured")}</p>
+            </div>
+          ) : !pushSupported ? (
+            <div className="rounded-2xl p-3 mb-3" style={{ background: "color-mix(in srgb, #ef4444 12%, transparent)", border: "1px solid color-mix(in srgb, #ef4444 32%, transparent)" }}>
+              <p className="text-xs">{tt("settings.pushUnsupported")}</p>
+            </div>
+          ) : pushSubscribed ? (
+            <>
+              <div className="rounded-2xl p-3 mb-3 flex items-center gap-2" style={{ background: "color-mix(in srgb, #22c55e 12%, transparent)", border: "1px solid color-mix(in srgb, #22c55e 32%, transparent)" }}>
+                <CheckCircle2 size={15} color="#22c55e" />
+                <span className="text-xs">{tt("settings.pushEnabled")}</span>
+              </div>
+              <button className="btn justify-center" disabled={pushBusy} onClick={disablePush}>
+                {tt("settings.pushDisable")}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs muted mb-3">{tt("settings.pushEnableHint")}</p>
+              <button className="btn btn-primary justify-center" disabled={pushBusy} onClick={enablePush}>
+                <BellRing size={14} /> {pushBusy ? tt("settings.pushEnabling") : tt("settings.pushEnable")}
+              </button>
+            </>
+          )}
+        </Card>
+
         {/* ─── Тема ─── */}
         <Card>
           <h3 className="font-semibold mb-3">{tt("settings.themeMode")}</h3>
@@ -373,10 +451,10 @@ export function SettingsClient({ user, telegram }: { user: SettingsUser; telegra
           <h3 className="font-semibold mb-4">{tt("settings.integrations")}</h3>
           <div className="flex flex-col gap-2.5">
             {[
-              { title: "Telegram Bot и платежи", desc: "Click · Payme · Uzum · SMS · Email", color: "#0ea5e9", href: "/integrations" },
-              { title: "Telegram Mini App", desc: "Витрина, баннеры, каталог", color: "#8b5cf6", href: "/miniapp" },
-              { title: "Официальный сайт", desc: "Страницы, SEO, публикация", color: "#22c55e", href: "/website" },
-              { title: "Instagram", desc: "Контент-план и публикации", color: "#ec4899", href: "/instagram" },
+              { title: tt("settings.integrationBot"), desc: tt("settings.integrationBotDesc"), color: "#0ea5e9", href: "/integrations" },
+              { title: tt("settings.integrationMiniApp"), desc: tt("settings.integrationMiniAppDesc"), color: "#8b5cf6", href: "/miniapp" },
+              { title: tt("settings.integrationWebsite"), desc: tt("settings.integrationWebsiteDesc"), color: "#22c55e", href: "/website" },
+              { title: tt("settings.integrationInstagram"), desc: tt("settings.integrationInstagramDesc"), color: "#ec4899", href: "/instagram" },
             ].map((i) => (
               <Link key={i.title} href={i.href} className="rounded-2xl p-3 flex items-center justify-between gap-3"
                 style={{ background: "rgba(var(--table-row))", border: "1px solid rgba(var(--border))" }}>

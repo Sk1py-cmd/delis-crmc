@@ -215,6 +215,7 @@ export const users = pgTable("users", {
   lastIp: text("last_ip").notNull().default("94.158.0.1"),
   device: text("device").notNull().default("MacBook Pro · Chrome"),
   twoFa: boolean("two_fa").notNull().default(false),
+  otpSecret: text("otp_secret"),
   passwordHash: text("password_hash").notNull().default(""),
   lastLoginAt: timestamp("last_login_at").notNull().defaultNow(),
 });
@@ -237,6 +238,22 @@ export const sessions = pgTable("sessions", {
     .references(() => users.id, { onDelete: "cascade" }),
   device: text("device").notNull().default(""),
   expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Подписки браузерных push-уведомлений (Web Push API). */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Endpoint push-сервиса уникален для каждой подписки браузера.
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  // Язык интерфейса на момент подписки — чтобы push-уведомления приходили
+  // на языке сотрудника, а не на языке того, кто создал заказ.
+  lang: text("lang").notNull().default("ru"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

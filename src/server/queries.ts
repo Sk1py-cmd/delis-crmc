@@ -3,6 +3,8 @@ import * as s from "@/db/schema";
 import { ensureSeed, syncNumberSequences } from "@/db/seed";
 import { desc, eq, sql, and, gte } from "drizzle-orm";
 import { canAccess } from "@/shared/config/nav";
+import { statusMeta } from "@/shared/lib/format";
+import { sendPushToAll } from "@/server/webpush";
 
 
 /** Ошибка бизнес-правила: наверх уходит как 400, а не 500. */
@@ -29,6 +31,19 @@ async function nextNumber(seq: string, prefix: string): Promise<string> {
 export const nextOrderNumber = () => nextNumber("order_number_seq", "DLS-");
 export const nextPurchaseOrderNumber = () => nextNumber("purchase_order_number_seq", "PO-");
 export const nextSku = () => nextNumber("product_sku_seq", "DLS-");
+
+/** Название способа оплаты на трёх языках — для push-уведомлений сотрудникам. */
+function pushPaymentLabel(payment: string): { ru: string; uz: string; en: string } {
+  const labels: Record<string, { ru: string; uz: string; en: string }> = {
+    cash: { ru: "Наличные", uz: "Naqd", en: "Cash" },
+    click: { ru: "Click", uz: "Click", en: "Click" },
+    payme: { ru: "Payme", uz: "Payme", en: "Payme" },
+    uzum: { ru: "Uzum", uz: "Uzum", en: "Uzum" },
+    bank: { ru: "Банк", uz: "Bank", en: "Bank" },
+    crm: { ru: "CRM", uz: "CRM", en: "CRM" },
+  };
+  return labels[payment] ?? { ru: payment, uz: payment, en: payment };
+}
 
 
 export type Product = typeof s.products.$inferSelect;
@@ -65,7 +80,7 @@ export async function getCompanyOS() {
     { key: "warehouse", label: "Склад", status: Number(counts.lowStock) > 0 ? "attention" : "online", latency: 24, color: "#f97316", items: Number(counts.lowStock) },
     { key: "finance", label: "Финансы", status: "online", latency: 29, color: "#14b8a6", items: Number(counts.todayRevenue) },
     { key: "agents", label: "Агенты продаж", status: "online", latency: 63, color: "#ec4899", items: Number(counts.agents) },
-    { key: "marketing", label: "Маркетинг", status: "online", latency: 48, color: "#a855f7", items: 6 },
+    { key: "marketing", label: "Маркетинг", status: "online", latency: 48, color: "#a855f7", items: 0 },
   ];
   return { counts, sync, modules };
 }
@@ -128,12 +143,35 @@ export async function getDashboard() {
     })
     .from(sql`(select 1) t`);
 
+  // Окна для честных дельт «за 30 дней»: текущие/прошлые расходы за месяц
+  // и число клиентов, существовавших 30 дней назад (для роста базы).
+  const [window] = await db
+    .select({
+      curExpenses: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and created_at >= now() - interval '30 days')`,
+      prevExpenses: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and created_at >= now() - interval '60 days' and created_at < now() - interval '30 days')`,
+      customers30dAgo: sql<string>`(select count(*) from customers where created_at < now() - interval '30 days')`,
+    })
+    .from(sql`(select 1) t`);
+
+  const [prevOrders] = await db
+    .select({
+      revenue: sql<string>`coalesce(sum(total),0)`,
+      profit: sql<string>`coalesce(sum(profit),0)`,
+      orders: sql<string>`count(*)`,
+    })
+    .from(s.orders)
+    .where(sql`created_at >= now() - interval '60 days' and created_at < now() - interval '30 days'`);
+
   const [todayVs] = await db
     .select({
       todayOrders: sql<string>`count(*) filter (where created_at >= current_date)`,
       todayRevenue: sql<string>`coalesce(sum(total) filter (where created_at >= current_date),0)`,
       yesterdayOrders: sql<string>`count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date)`,
       yesterdayRevenue: sql<string>`coalesce(sum(total) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0)`,
+      todayAvg: sql<string>`coalesce(sum(total) filter (where created_at >= current_date),0) / nullif(count(*) filter (where created_at >= current_date),0)`,
+      yesterdayAvg: sql<string>`coalesce(sum(total) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0) / nullif(count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0)`,
+      todayCancelled: sql<string>`count(*) filter (where created_at >= current_date and status = 'cancelled')`,
+      yesterdayCancelled: sql<string>`count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date and status = 'cancelled')`,
     })
     .from(s.orders);
 
@@ -189,7 +227,25 @@ export async function getDashboard() {
   const acts = await db.select().from(s.activity).orderBy(desc(s.activity.createdAt)).limit(6);
   const agents = await db.select().from(s.agents).orderBy(desc(s.agents.fact)).limit(5);
 
-  return { totals, counts, todayVs, byDay, byChannel, byStatus, topProducts, lowStock, recentOrders, recentCustomers, recentMessages, acts, agents };
+  // Дельты «за 30 дней» считаются по реальным окнам, а не константам из вёрстки.
+  const last30 = byDay.reduce(
+    (a, r) => ({
+      revenue: a.revenue + Number(r.revenue || 0),
+      profit: a.profit + Number(r.profit || 0),
+      orders: a.orders + Number(r.orders || 0),
+    }),
+    { revenue: 0, profit: 0, orders: 0 },
+  );
+  const prev30 = {
+    revenue: Number(prevOrders.revenue),
+    profit: Number(prevOrders.profit),
+    orders: Number(prevOrders.orders),
+    expenses: Number(window.prevExpenses),
+  };
+  const expenses30 = Number(window.curExpenses);
+  const customers30dAgo = Number(window.customers30dAgo);
+
+  return { totals, counts, todayVs, byDay, byChannel, byStatus, topProducts, lowStock, recentOrders, recentCustomers, recentMessages, acts, agents, last30, prev30, expenses30, customers30dAgo };
 }
 
 export async function recentOrdersList(limit = 100) {
@@ -625,8 +681,18 @@ export async function getAnalytics() {
     .select({ name: s.customers.source, value: sql<string>`count(*)` })
     .from(s.customers)
     .groupBy(s.customers.source);
+  // Лояльность и маркетинг для KPI аналитики: считаем по фактам, а не по
+  // константам вёрстки. Покупатели и повторные покупки берутся из заказов —
+  // денормализованные счётчики customers.* обновляются только при сиде.
+  const [loyalty] = await db
+    .select({
+      buyers: sql<string>`(select count(distinct customer_id) from orders where customer_id is not null)`,
+      repeat: sql<string>`(select count(*) from (select customer_id from orders where customer_id is not null group by customer_id having count(*) >= 2) r)`,
+      marketing: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and category = 'marketing')`,
+    })
+    .from(sql`(select 1) t`);
   const topCustomers = await db.select().from(s.customers).orderBy(desc(s.customers.totalSpent)).limit(6);
-  return { ...dash, byCity, bySource, topCustomers };
+  return { ...dash, loyalty, byCity, bySource, topCustomers };
 }
 
 export async function getChatThreads() {
@@ -793,7 +859,32 @@ export async function setOrderStatus(id: number, status: string, by = "Муза�
   await db.insert(s.activity).values({ actor: by, action: `изменил статус на «${status}»`, entity: order.number });
   await recordSyncEvent({ source: "crm", target: "telegram_bot", entity: "order", action: "order_status_changed", payload: { order: order.number, status } });
   await recordSyncEvent({ source: "crm", target: "miniapp", entity: "order", action: "customer_order_updated", payload: { order: order.number, status } });
+  // Реальная доставка статуса клиенту в Telegram, а не только sync-событие:
+  // если у клиента есть telegram_id и бот подключён, шлём ему сообщение.
+  await notifyCustomerStatusChanged(order.number, order.customerId, status);
   return updated;
+}
+
+/**
+ * Отправляет клиенту в Telegram сообщение о смене статуса его заказа.
+ *
+ * Сбой доставки (бот выключен, нет сети, у клиента нет telegram_id) не
+ * должен ломать саму смену статуса — поэтому молча проглатываем ошибки.
+ */
+async function notifyCustomerStatusChanged(orderNumber: string, customerId: number | null, status: string) {
+  if (!customerId) return;
+  try {
+    const [c] = await db
+      .select({ telegramId: s.customers.telegramId })
+      .from(s.customers)
+      .where(eq(s.customers.id, customerId))
+      .limit(1);
+    if (!c?.telegramId) return;
+    const label = statusMeta(status).label;
+    await sendTelegramMessage(c.telegramId, `📦 Ваш заказ ${orderNumber}: статус «${label}»`);
+  } catch {
+    /* Смена статуса важнее, чем уведомление */
+  }
 }
 
 export async function addMessage(customerId: number, body: string, fromAdmin = true, kind = "text") {
@@ -882,6 +973,21 @@ export async function createOrderQuick(customerId: number, productId: number, qt
   // Отправляем уведомление владельцу в Telegram
   await notifyOwnerAboutOrder(order.number, String(total), payment, p.name);
 
+  // И браузерный push всем подписавшимся сотрудникам — на языке каждого
+  // подписчика (язык хранится в его подписке).
+  const pay = pushPaymentLabel(payment);
+  await sendPushToAll(
+    {
+      title: `Новый заказ ${order.number}`,
+      body: `Сумма: ${total} сум · Оплата: ${pay.ru}`,
+      url: `/orders/${order.id}`,
+    },
+    {
+      uz: { title: `Yangi buyurtma ${order.number}`, body: `Summa: ${total} so'm · To'lov: ${pay.uz}`, url: `/orders/${order.id}` },
+      en: { title: `New order ${order.number}`, body: `Amount: ${total} UZS · Payment: ${pay.en}`, url: `/orders/${order.id}` },
+    },
+  ).catch(() => {});
+
   return order;
 }
 
@@ -930,6 +1036,19 @@ export async function createMultiOrder(customerId: number, items: { productId: n
 
   await recordSyncEvent({ source: "crm", target: "telegram_bot", entity: "order", action: "order_created", payload: { order: order.number, customerId, items: items.length } });
   await recordSyncEvent({ source: "crm", target: "finance", entity: "order", action: "revenue_planned", payload: { order: order.number, total } });
+
+  await sendPushToAll(
+    {
+      title: `Новый заказ ${order.number}`,
+      body: `Сумма: ${total} сум · Позиций: ${items.length}`,
+      url: `/orders/${order.id}`,
+    },
+    {
+      uz: { title: `Yangi buyurtma ${order.number}`, body: `Summa: ${total} so'm · Pozitsiyalar: ${items.length}`, url: `/orders/${order.id}` },
+      en: { title: `New order ${order.number}`, body: `Amount: ${total} UZS · Items: ${items.length}`, url: `/orders/${order.id}` },
+    },
+  ).catch(() => {});
+
   return order;
 }
 
@@ -1298,14 +1417,17 @@ export async function getMarketingData() {
     })
     .from(s.orders);
 
-  // Канали привлечения и расходы
-  const adChannels = [
-    { name: "Telegram Bot / Ads", spent: 18400000, revenue: 84200000, leads: 1240, orders: 380, roi: 358, color: "#0ea5e9" },
-    { name: "Telegram Mini App", spent: 8200000, revenue: 56100000, leads: 910, orders: 290, roi: 584, color: "#8b5cf6" },
-    { name: "Instagram Ads / Reels", spent: 24600000, revenue: 78900000, leads: 2180, orders: 310, roi: 221, color: "#ec4899" },
-    { name: "Агенты и B2B рекомендации", spent: 12000000, revenue: 95400000, leads: 320, orders: 180, roi: 695, color: "#22c55e" },
-    { name: "Официальный сайт SEO/Direct", spent: 4800000, revenue: 32000000, leads: 480, orders: 110, roi: 567, color: "#f59e0b" },
-  ];
+  // Каналы привлечения и расходы. Реальные данные появятся здесь после
+  // подключения рекламных интеграций; демо-значения не заливаем.
+  const adChannels: {
+    name: string;
+    spent: number;
+    revenue: number;
+    leads: number;
+    orders: number;
+    roi: number;
+    color: string;
+  }[] = [];
 
   return {
     promos,
@@ -1634,8 +1756,8 @@ export async function getPnLReport() {
   return { byCategory, byChannel, byMonth, expenses, topProducts };
 }
 
-// ═══ СБРОС ДЕМО-ДАННЫХ ═══
-export async function resetDemoData(actor: string, keepSettings = true) {
+// ═══ СБРОС ОПЕРАЦИОННЫХ ДАННЫХ ═══
+export async function resetOperationalData(actor: string, keepSettings = true) {
   await db.execute(sql`
     truncate table order_items, orders, messages, agent_messages, agent_visits,
       stock_moves, purchase_items, purchase_orders, returns, deliveries,
@@ -1653,7 +1775,7 @@ export async function resetDemoData(actor: string, keepSettings = true) {
   // Таблицы очищены — возвращаем счётчики номеров к стартовым значениям,
   // иначе они продолжали бы расти относительно уже несуществующих заказов.
   await syncNumberSequences();
-  await db.insert(s.activity).values({ actor, action: "очистил демо-данные системы", entity: "Полный сброс операций" });
+  await db.insert(s.activity).values({ actor, action: "сбросил операционные данные системы", entity: "Полный сброс операций" });
   return { ok: true };
 }
 

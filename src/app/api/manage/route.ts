@@ -7,7 +7,8 @@ import { isKnownRole, canAccess } from "@/shared/config/nav";
 import { ACTION_POLICY, DENY_MESSAGE } from "@/shared/config/actions";
 import { getSessionUser, canManageUsers, revokeUserSessions, currentSessionToken } from "@/server/auth";
 import { hashPassword, verifyPassword } from "@/server/password";
-import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetDemoData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
+import { generateSecret, otpauthUrl, verifyTotp } from "@/server/totp";
+import { recordSyncEvent, syncEverything, recordBroadcast, createPromocode, toggleMarketingTrigger, createSupplier, createPurchaseOrder, receivePurchaseOrder, createReturn, approveReturn, addCourier, assignDelivery, completeDelivery, addAgentVisit, createAgentStoreOrder, createTask, updateTaskStatus, deleteTask, sendAgentMessage, saveIntegration, testTelegramBot, sendTelegramMessage, saveArticle, deleteArticle, resetOperationalData, publishSurface, saveSeoSettings, createInstagramPost, saveMiniAppBanners, nextSku, BusinessError } from "@/server/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +86,45 @@ export async function POST(req: NextRequest) {
         await revokeUserSessions(num(d.id));
         return NextResponse.json({ ok: true });
       }
+      // 2FA: сначала генерируем секрет и показываем QR, затем подтверждаем
+      // кодом из приложения-аутентификатора и только тогда включаем защиту.
+      // Иначе админ мог бы включить 2FA, которую сотрудник не настроил, —
+      // и тот потерял бы доступ к аккаунту.
+      case "setup2fa": {
+        const [u] = await db.select().from(s.users).where(eq(s.users.id, num(d.id))).limit(1);
+        if (!u) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+        if (u.twoFa && u.otpSecret) {
+          return NextResponse.json({ error: "2FA уже включена" }, { status: 400 });
+        }
+        const secret = generateSecret();
+        return NextResponse.json({
+          ok: true,
+          secret,
+          otpauthUrl: otpauthUrl(secret, u.login || u.name, "DELIS CRM"),
+        });
+      }
+      case "confirm2fa": {
+        const secret = str(d.secret);
+        const code = str(d.code);
+        const [u] = await db.select().from(s.users).where(eq(s.users.id, num(d.id))).limit(1);
+        if (!u) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+        if (!secret || !code) {
+          return NextResponse.json({ error: "Нужны секрет и код подтверждения" }, { status: 400 });
+        }
+        if (!verifyTotp(code, secret)) {
+          return NextResponse.json({ error: "Неверный код подтверждения" }, { status: 400 });
+        }
+        await db.update(s.users).set({ twoFa: true, otpSecret: secret }).where(eq(s.users.id, u.id));
+        await db.insert(s.activity).values({ actor: user.name, action: "включил 2FA", entity: u.name });
+        return NextResponse.json({ ok: true });
+      }
       case "toggle2fa": {
-        await db.update(s.users).set({ twoFa: sql`not two_fa` }).where(eq(s.users.id, num(d.id)));
+        // Выключение: снимаем флаг и стираем секрет — без ключа защита не
+        // действует, и повторное включение проходит через setup2fa заново.
+        const [u] = await db.select().from(s.users).where(eq(s.users.id, num(d.id))).limit(1);
+        if (!u) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+        await db.update(s.users).set({ twoFa: false, otpSecret: null }).where(eq(s.users.id, u.id));
+        await db.insert(s.activity).values({ actor: user.name, action: "выключил 2FA", entity: u.name });
         return NextResponse.json({ ok: true });
       }
       case "deleteUser": {
@@ -456,9 +494,9 @@ export async function POST(req: NextRequest) {
         await saveMiniAppBanners(banners, user.name);
         return NextResponse.json({ ok: true, count: banners.length });
       }
-      case "resetDemoData": {
-        if (user.role !== "owner") return NextResponse.json({ error: "Только Owner может очистить данные" }, { status: 403 });
-        await resetDemoData(user.name, Boolean(d.keepSettings ?? true));
+      case "resetOperationalData": {
+        if (user.role !== "owner") return NextResponse.json({ error: "Только Owner может сбросить данные" }, { status: 403 });
+        await resetOperationalData(user.name, Boolean(d.keepSettings ?? true));
         return NextResponse.json({ ok: true });
       }
       case "sendPush": {

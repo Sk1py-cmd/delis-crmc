@@ -78,7 +78,7 @@ describe("деньги и рассылки закрыты для рядовых 
     "publishSite",
     "createPromocode",
     "saveIntegration",
-    "resetDemoData",
+    "resetOperationalData",
     "createUser",
     "deleteUser",
   ];

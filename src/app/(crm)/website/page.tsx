@@ -33,9 +33,11 @@ export default async function WebsitePage() {
             {blocks.map((b) => (
               <ContentCard key={b.id} id={b.id} title={b.title} body={b.body} enabled={b.enabled} statusLabel={b.enabled ? "Опубликовано" : "Черновик"} updatedAt={dt(b.updatedAt)} />
             ))}
-            <ContentCard title="Контакты" body="Адрес, карта, форма обратной связи" enabled statusLabel="Опубликовано" />
-            <ContentCard title="Отзывы" body="46 отзывов · рейтинг 4.9" enabled statusLabel="Опубликовано" />
-            <ContentCard title="Новости" body="12 публикаций" enabled statusLabel="Опубликовано" />
+            {blocks.length === 0 && (
+              <p className="muted text-sm col-span-full py-8 text-center">
+                Страниц пока нет — добавьте контент в редакторе
+              </p>
+            )}
           </div>
         </Card>
 
