@@ -128,12 +128,35 @@ export async function getDashboard() {
     })
     .from(sql`(select 1) t`);
 
+  // Окна для честных дельт «за 30 дней»: текущие/прошлые расходы за месяц
+  // и число клиентов, существовавших 30 дней назад (для роста базы).
+  const [window] = await db
+    .select({
+      curExpenses: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and created_at >= now() - interval '30 days')`,
+      prevExpenses: sql<string>`(select coalesce(sum(amount),0) from transactions where kind = 'expense' and created_at >= now() - interval '60 days' and created_at < now() - interval '30 days')`,
+      customers30dAgo: sql<string>`(select count(*) from customers where created_at < now() - interval '30 days')`,
+    })
+    .from(sql`(select 1) t`);
+
+  const [prevOrders] = await db
+    .select({
+      revenue: sql<string>`coalesce(sum(total),0)`,
+      profit: sql<string>`coalesce(sum(profit),0)`,
+      orders: sql<string>`count(*)`,
+    })
+    .from(s.orders)
+    .where(sql`created_at >= now() - interval '60 days' and created_at < now() - interval '30 days'`);
+
   const [todayVs] = await db
     .select({
       todayOrders: sql<string>`count(*) filter (where created_at >= current_date)`,
       todayRevenue: sql<string>`coalesce(sum(total) filter (where created_at >= current_date),0)`,
       yesterdayOrders: sql<string>`count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date)`,
       yesterdayRevenue: sql<string>`coalesce(sum(total) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0)`,
+      todayAvg: sql<string>`coalesce(sum(total) filter (where created_at >= current_date),0) / nullif(count(*) filter (where created_at >= current_date),0)`,
+      yesterdayAvg: sql<string>`coalesce(sum(total) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0) / nullif(count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date),0)`,
+      todayCancelled: sql<string>`count(*) filter (where created_at >= current_date and status = 'cancelled')`,
+      yesterdayCancelled: sql<string>`count(*) filter (where created_at >= current_date - interval '1 day' and created_at < current_date and status = 'cancelled')`,
     })
     .from(s.orders);
 
@@ -189,7 +212,25 @@ export async function getDashboard() {
   const acts = await db.select().from(s.activity).orderBy(desc(s.activity.createdAt)).limit(6);
   const agents = await db.select().from(s.agents).orderBy(desc(s.agents.fact)).limit(5);
 
-  return { totals, counts, todayVs, byDay, byChannel, byStatus, topProducts, lowStock, recentOrders, recentCustomers, recentMessages, acts, agents };
+  // Дельты «за 30 дней» считаются по реальным окнам, а не константам из вёрстки.
+  const last30 = byDay.reduce(
+    (a, r) => ({
+      revenue: a.revenue + Number(r.revenue || 0),
+      profit: a.profit + Number(r.profit || 0),
+      orders: a.orders + Number(r.orders || 0),
+    }),
+    { revenue: 0, profit: 0, orders: 0 },
+  );
+  const prev30 = {
+    revenue: Number(prevOrders.revenue),
+    profit: Number(prevOrders.profit),
+    orders: Number(prevOrders.orders),
+    expenses: Number(window.prevExpenses),
+  };
+  const expenses30 = Number(window.curExpenses);
+  const customers30dAgo = Number(window.customers30dAgo);
+
+  return { totals, counts, todayVs, byDay, byChannel, byStatus, topProducts, lowStock, recentOrders, recentCustomers, recentMessages, acts, agents, last30, prev30, expenses30, customers30dAgo };
 }
 
 export async function recentOrdersList(limit = 100) {

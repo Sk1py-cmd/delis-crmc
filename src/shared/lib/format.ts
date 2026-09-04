@@ -15,6 +15,18 @@ export const compact = (v: number | string) => {
 export const num = (v: number | string) =>
   new Intl.NumberFormat("ru-RU").format(Number(v || 0));
 
+/**
+ * Процент изменения текущего значения к прошлому, округлённый до десятых.
+ * Возвращает `null`, когда сравнение некорректно (нет прошлого значения,
+ * оно равно нулю или не является числом) — тогда дельту лучше не показывать.
+ */
+export const pctChange = (current: number | string, previous: number | string): number | null => {
+  const cur = Number(current);
+  const prev = Number(previous);
+  if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return null;
+  return Math.round(((cur - prev) / prev) * 1000) / 10;
+};
+
 export const dt = (v: Date | string | null | undefined) => {
   if (!v) return "—";
   const d = new Date(v);

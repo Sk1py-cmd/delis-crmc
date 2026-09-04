@@ -2,7 +2,7 @@ import { getCompanyOS, getDashboard } from "@/server/queries";
 import { StatGrid } from "@/widgets/StatCard";
 import { Card, Badge, Progress, Avatar } from "@/shared/ui/kit";
 import { RevenueArea, Donut, Legend, Bars } from "@/shared/ui/charts";
-import { money, compact, dt, statusMeta, SOURCE_LABEL, num } from "@/shared/lib/format";
+import { money, compact, dt, statusMeta, SOURCE_LABEL, num, pctChange } from "@/shared/lib/format";
 import Link from "next/link";
 import { CompanyOS } from "@/widgets/CompanyOS";
 import { LiveClock } from "@/widgets/LiveClock";
@@ -26,12 +26,12 @@ export default async function DashboardPage() {
   const expenses = Number(d.counts.expenses);
 
   const stats = [
-    { label: "Выручка", value: revenue, color: "#8b5cf6", icon: "💰", delta: 18.4 },
-    { label: "Прибыль", value: profit, color: "#22c55e", icon: "📈", delta: 12.1 },
-    { label: "Заказы", value: orders, color: "#3b82f6", icon: "🧾", delta: 9.6, mode: "num" as const },
-    { label: "Клиенты", value: customers, color: "#ec4899", icon: "👥", delta: 22.5, mode: "num" as const },
-    { label: "Расходы", value: expenses, color: "#f97316", icon: "💸", delta: -4.2 },
-    { label: "Остаток склада", value: Number(d.counts.stock), color: "#14b8a6", icon: "📦", delta: 3.8, mode: "num" as const },
+    { label: "Выручка", value: revenue, color: "#8b5cf6", icon: "💰", delta: pctChange(d.last30.revenue, d.prev30.revenue) },
+    { label: "Прибыль", value: profit, color: "#22c55e", icon: "📈", delta: pctChange(d.last30.profit, d.prev30.profit) },
+    { label: "Заказы", value: orders, color: "#3b82f6", icon: "🧾", delta: pctChange(d.last30.orders, d.prev30.orders), mode: "num" as const },
+    { label: "Клиенты", value: customers, color: "#ec4899", icon: "👥", delta: pctChange(customers, d.customers30dAgo), mode: "num" as const },
+    { label: "Расходы", value: expenses, color: "#f97316", icon: "💸", delta: pctChange(d.expenses30, d.prev30.expenses) },
+    { label: "Остаток склада", value: Number(d.counts.stock), color: "#14b8a6", icon: "📦", mode: "num" as const },
   ];
 
   const secondary = [
@@ -69,30 +69,32 @@ export default async function DashboardPage() {
           },
           {
             label: "Средний чек",
-            today: Number(d.totals.avg),
-            yesterday: Number(d.totals.avg) * 0.92,
+            today: Number(d.todayVs.todayAvg),
+            yesterday: Number(d.todayVs.yesterdayAvg),
             color: "#8b5cf6",
             suffix: "сум",
           },
           {
             label: "Отмен",
-            today: Number(d.totals.cancelled),
-            yesterday: Math.round(Number(d.totals.cancelled) * 1.3),
+            today: Number(d.todayVs.todayCancelled),
+            yesterday: Number(d.todayVs.yesterdayCancelled),
             color: "#ef4444",
             suffix: "",
           },
         ].map((kpi) => {
-          const delta = kpi.yesterday === 0 ? 100 : Math.round(((kpi.today - kpi.yesterday) / kpi.yesterday) * 100);
-          const up = delta >= 0;
+          const delta = pctChange(kpi.today, kpi.yesterday);
+          const up = (delta ?? 0) >= 0;
           return (
             <Card key={kpi.label} delay={0}>
               <div className="text-[0.72rem] uppercase tracking-wider muted">{kpi.label}</div>
               <div className="text-xl font-semibold mt-2" style={{ color: kpi.color }}>
                 {num(kpi.today)} {kpi.suffix && <span className="text-xs muted">{kpi.suffix}</span>}
               </div>
-              <div className="flex items-center gap-1 mt-1.5 text-xs font-medium" style={{ color: up ? "var(--success)" : "var(--error)" }}>
-                {up ? "↑" : "↓"} {up ? "+" : ""}{delta}% <span className="muted font-normal">vs вчера</span>
-              </div>
+              {delta !== null && (
+                <div className="flex items-center gap-1 mt-1.5 text-xs font-medium" style={{ color: up ? "var(--success)" : "var(--error)" }}>
+                  {up ? "↑" : "↓"} {up ? "+" : ""}{delta}% <span className="muted font-normal">vs вчера</span>
+                </div>
+              )}
             </Card>
           );
         })}
@@ -121,7 +123,14 @@ export default async function DashboardPage() {
               <h3 className="font-semibold">Выручка и прибыль</h3>
               <p className="muted text-xs mt-0.5">Динамика за последние 30 дней</p>
             </div>
-            <Badge color="#22c55e">+18.4% MoM</Badge>
+            {(() => {
+              const mom = pctChange(d.last30.revenue, d.prev30.revenue);
+              return mom === null ? null : (
+                <Badge color={mom >= 0 ? "#22c55e" : "#ef4444"}>
+                  {mom >= 0 ? "+" : ""}{mom}% MoM
+                </Badge>
+              );
+            })()}
           </div>
           <RevenueArea data={chart} />
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
