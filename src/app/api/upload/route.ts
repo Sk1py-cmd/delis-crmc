@@ -18,7 +18,18 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
 
-  const form = await req.formData();
+  // Без `multipart/form-data` Next.js бросает TypeError при разборе формы,
+  // и он уходил наружу как 500. Это пользовательская ошибка — вернём 400.
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Ожидался multipart/form-data с полем file" },
+      { status: 400 },
+    );
+  }
+
   const file = form.get("file") as File | null;
   const productId = Number(form.get("productId") ?? 0);
 

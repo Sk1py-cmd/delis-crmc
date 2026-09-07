@@ -135,8 +135,8 @@ describe("защита разделов централизована", () => {
     expect(layout).toContain("redirect");
   });
 
-  it("middleware пробрасывает путь для этой проверки", async () => {
-    const mw = await readFile(path.join(process.cwd(), "src/middleware.ts"), "utf8");
+  it("proxy пробрасывает путь для этой проверки", async () => {
+    const mw = await readFile(path.join(process.cwd(), "src/proxy.ts"), "utf8");
 
     expect(mw).toContain("x-pathname");
     // Роль не должна браться из cookie — её подделает клиент.
