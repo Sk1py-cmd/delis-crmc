@@ -5,6 +5,11 @@ import * as s from "@/db/schema";
 import { getSessionUser } from "@/server/auth";
 
 export const dynamic = "force-dynamic";
+// На Vercel обходчик жёстко ограничивает время выполнения функции. SSE-поток
+// живёт дольше обычного ответа, поэтому задаём максимум (для Hobby плана это
+// 60 с, для Pro можно больше). EventSource на клиенте при обрыве сам
+// переподключается и по Last-Event-ID докачивает пропущенное.
+export const maxDuration = 60;
 
 /**
  * Live-лента событий по Server-Sent Events (SSE).
