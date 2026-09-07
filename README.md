@@ -120,20 +120,10 @@ npm run vapid:generate   # выведет VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY
 
 ## CI
 
-Конфигурация GitHub Actions лежит в `.github/ci.workflow.yml`. Она не
-включена автоматически: токен, которым делались коммиты, не имеет права
-`workflows`, поэтому файл нельзя положить сразу в `.github/workflows/`.
-
-Чтобы включить проверки на каждый PR:
-
-```bash
-mkdir -p .github/workflows
-git mv .github/ci.workflow.yml .github/workflows/ci.yml
-git commit -m "Включить CI" && git push
-```
-
+Конфигурация GitHub Actions — `.github/workflows/ci.yml` (уже включена).
 Пайплайн гоняет три задачи: линт с типами и юнит-тестами (без базы),
-интеграционные тесты с сервисом `postgres:16` и сборку.
+интеграционные тесты с сервисом `postgres:16` и сборку. Каждый PR проходит
+автоматическую проверку.
 
 ## Скрипты
 
@@ -192,6 +182,70 @@ MIME (изображения, видео, PDF), тип проверяется п
 
 > На платформах с эфемерной ФС (Vercel и т.п.) задайте `UPLOAD_DIR` с
 > постоянным томом либо переключитесь на `STORAGE_DRIVER=s3`.
+
+## Деплой на Vercel
+
+Приложение — обычный Next.js App Router и готово к Vercel без доп. сервера
+(SSE сделан через route handler). Для запуска на проде настройте:
+
+### 1. База данных
+Vercel не хранит вашу PostgreSQL — нужна внешняя БД (Neon, Supabase,
+Vercel Postgres и т.п.). Создайте БД и пропишите строку подключения:
+
+```html
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+```
+
+Миграции применяются автоматически при первом старте, данные (owner,
+категории, интеграции) создаются сами.
+
+### 2. Хранилище файлов
+Файловая система на Vercel эфемерная — файлы пропадают при передеплое.
+Выберите один из двух вариантов:
+
+- **`STORAGE_DRIVER=s3`** (рекомендуется) — Cloudflare R2 / AWS S3 / MinIO.
+  Задайте `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+  `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=true` (для R2 — `S3_REGION=auto`).
+- **постоянный том** — если подключите сборку с диском.
+
+### 3. Push-уведомления (Web Push)
+Сгенерируйте VAPID-ключи и пропишите в Environment Variables:
+
+```bash
+npm run vapid:generate
+```
+
+```html
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@example.com
+```
+
+### 4. Минимум переменных на проде
+
+| Переменная       | Зачем |
+| ---------------- | ----- |
+| `DATABASE_URL`   | подключение к БД |
+| `OWNER_PASSWORD` | пароль владельца (обязательно сменить) |
+| `STORAGE_DRIVER` | `s3` или пусто (local) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | push |
+| `TRUST_PROXY`    | `1`, если Vercel (перезаписывает x-forwarded-for) |
+
+### Деплой
+Импортируйте репозиторий в Vercel или используйте CLI:
+
+```bash
+npm i -g vercel
+vercel        # первичный деплой (создаёт проект и env)
+vercel --prod # прод-деплой
+```
+
+После деплоя смените `/api/health`-проверки и войдите как `owner`.
+
+> SSE-лента (`/api/events`) на Vercel ограничена `maxDuration` функции
+> (60 с на Hobby). `EventSource` на клиенте при обрыве сам переподключается
+> и по `Last-Event-ID` докачивает пропущенное — это ожидаемое поведение,
+> «разрыв» соединения не выглядит как ошибка для пользователя.
 
 ## Тесты
 
