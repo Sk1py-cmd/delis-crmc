@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { canAccess, navForRole, ROLE_ACCESS, NAV, isKnownRole } from "@/shared/config/nav";
@@ -123,16 +123,46 @@ describe("canManageUsers", () => {
 });
 
 describe("защита разделов централизована", () => {
-  it("layout проверяет права, а не отдельные страницы", async () => {
-    // Точечный requireAccess стоял на 4 страницах из 24, поэтому остальные
-    // открывались по прямой ссылке. Проверка должна жить в общем layout.
+  it("layout перенаправляет гостя, а не рендерит форму поверх закрытой страницы", async () => {
     const layout = await readFile(
       path.join(process.cwd(), "src/app/(crm)/layout.tsx"),
       "utf8",
     );
 
     expect(layout).toContain("canAccess");
-    expect(layout).toContain("redirect");
+    expect(layout).toContain('redirect("/login")');
+    expect(layout).not.toContain("<LoginScreen");
+  });
+
+  it("requireAccess останавливает гостя до запроса закрытых данных", async () => {
+    const guard = await readFile(
+      path.join(process.cwd(), "src/server/guard.ts"),
+      "utf8",
+    );
+
+    expect(guard).toContain('redirect("/login")');
+  });
+
+  it("каждая CRM-страница проверяет доступ до загрузки данных", async () => {
+    const root = path.join(process.cwd(), "src/app/(crm)");
+
+    async function pagesIn(dir: string): Promise<string[]> {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const nested = await Promise.all(entries.map(async (entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return pagesIn(full);
+        return entry.name === "page.tsx" ? [full] : [];
+      }));
+      return nested.flat();
+    }
+
+    const pages = await pagesIn(root);
+    expect(pages.length).toBeGreaterThan(20);
+
+    for (const file of pages) {
+      const source = await readFile(file, "utf8");
+      expect(source, path.relative(root, file)).toContain("requireAccess");
+    }
   });
 
   it("proxy пробрасывает путь для этой проверки", async () => {

@@ -12,7 +12,8 @@ import { useT } from "@/shared/i18n/useT";
 
 interface IntegrationLite {
   id: number; key: string; title: string; enabled: boolean;
-  credentials: Record<string, string>; status: string; lastCheckAt: string | null;
+  credentials: Record<string, string>; configuredSecrets: string[];
+  status: string; lastCheckAt: string | null;
 }
 
 const CONFIG: Record<string, { icon: typeof Bot; color: string; desc: string; fields: { key: string; label: string; placeholder: string; secret?: boolean }[]; help: string }> = {
@@ -219,7 +220,11 @@ export function IntegrationsClient({ integrations, role }: { integrations: Integ
                 <input
                   className="input font-mono text-sm"
                   type={f.secret ? "password" : "text"}
-                  placeholder={f.placeholder}
+                  placeholder={
+                    f.secret && editing.configuredSecrets.includes(f.key)
+                      ? "Секрет сохранён — оставьте пустым, чтобы не менять"
+                      : f.placeholder
+                  }
                   value={form[f.key] ?? ""}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                 />

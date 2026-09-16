@@ -2,10 +2,12 @@ import { getContent, getProducts } from "@/server/queries";
 import { Card, PageHeader } from "@/shared/ui/kit";
 import { ContentCard } from "@/widgets/ContentCard";
 import { InstagramActions } from "./InstagramActions";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function InstagramPage() {
+  await requireAccess("/instagram");
   const [blocks, products] = await Promise.all([getContent("instagram"), getProducts()]);
 
   return (

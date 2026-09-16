@@ -1,9 +1,11 @@
 import { getReturnsData, recentOrdersList } from "@/server/queries";
 import { ReturnsClient } from "./ReturnsClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReturnsPage() {
+  await requireAccess("/returns");
   const [returns, orders] = await Promise.all([getReturnsData(), recentOrdersList(50)]);
   return (
     <ReturnsClient

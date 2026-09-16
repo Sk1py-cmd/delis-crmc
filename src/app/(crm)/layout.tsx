@@ -2,7 +2,6 @@ import { Sidebar } from "@/widgets/Sidebar";
 import { Topbar } from "@/widgets/Topbar";
 import { PageTransition } from "@/shared/ui/PageTransition";
 import { getSessionUser } from "@/server/auth";
-import { LoginScreen } from "@/app/login/LoginScreen";
 import { canAccess } from "@/shared/config/nav";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -12,7 +11,10 @@ export const dynamic = "force-dynamic";
 export default async function CrmLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
 
-  if (!user) return <LoginScreen />;
+  // Вложенные server components могут начать загрузку параллельно с layout.
+  // Поэтому нельзя просто отрисовать форму входа здесь: их RSC-payload с
+  // данными попадёт в HTML. Redirect полностью обрывает неавторизованный ответ.
+  if (!user) redirect("/login");
 
   // Единая проверка прав на все разделы CRM. Точечный requireAccess стоял
   // лишь на 4 страницах из 24: остальные прятались из меню, но открывались

@@ -3,10 +3,12 @@ import { CompanyOS } from "@/widgets/CompanyOS";
 import { Card, PageHeader, Badge, Avatar, Progress } from "@/shared/ui/kit";
 import { money, dt, statusMeta, SOURCE_LABEL, num } from "@/shared/lib/format";
 import Link from "next/link";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyOSPage() {
+  await requireAccess("/company-os");
   const [os, dash, orders, products, customers, finance] = await Promise.all([
     getCompanyOS(),
     getDashboard(),

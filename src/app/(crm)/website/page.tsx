@@ -3,6 +3,7 @@ import { Card, PageHeader } from "@/shared/ui/kit";
 import { dt } from "@/shared/lib/format";
 import { ContentCard } from "@/widgets/ContentCard";
 import { WebsiteHeaderActions, SeoForm } from "./WebsiteActions";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ const SEO_DEFAULTS: Record<string, string> = {
 };
 
 export default async function WebsitePage() {
+  await requireAccess("/website");
   const blocks = await getContent("site");
 
   return (

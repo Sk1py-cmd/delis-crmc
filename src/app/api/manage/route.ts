@@ -396,7 +396,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, id: i?.id, status: i?.status });
       }
       case "testTelegram": {
-        const res = await testTelegramBot(str(d.token));
+        let token = str(d.token).trim();
+        if (!token) {
+          const [current] = await db
+            .select({ credentials: s.integrations.credentials })
+            .from(s.integrations)
+            .where(eq(s.integrations.key, "telegram_bot"))
+            .limit(1);
+          token = current?.credentials?.token ?? "";
+        }
+        const res = await testTelegramBot(token);
         if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
         return NextResponse.json({ ok: true, username: res.username, name: res.name });
       }

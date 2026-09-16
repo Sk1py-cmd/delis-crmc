@@ -3,10 +3,12 @@ import { Card, PageHeader, Badge } from "@/shared/ui/kit";
 import { money } from "@/shared/lib/format";
 import { ContentCard } from "@/widgets/ContentCard";
 import { MiniAppActions } from "./MiniAppActions";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function MiniAppPage() {
+  await requireAccess("/miniapp");
   const [blocks, products] = await Promise.all([getContent("miniapp"), getProducts()]);
   const featured = products.slice(0, 4);
 
