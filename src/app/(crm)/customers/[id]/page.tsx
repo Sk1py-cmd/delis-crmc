@@ -4,10 +4,12 @@ import Link from "next/link";
 import { Card, Badge, Avatar, Progress } from "@/shared/ui/kit";
 import { money, dt, statusMeta, SOURCE_LABEL, dateOnly } from "@/shared/lib/format";
 import { NoteSaver } from "./NoteSaver";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAccess("/customers");
   const { id } = await params;
   const data = await getCustomer(Number(id));
   if (!data) notFound();

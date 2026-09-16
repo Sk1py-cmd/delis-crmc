@@ -3,10 +3,12 @@ import { Card, PageHeader, Badge, Progress, Avatar } from "@/shared/ui/kit";
 import { StatGrid } from "@/widgets/StatCard";
 import { RevenueArea, Bars, Donut, Legend } from "@/shared/ui/charts";
 import { money, num, pctChange, SOURCE_LABEL, statusMeta } from "@/shared/lib/format";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
+  await requireAccess("/analytics");
   const a = await getAnalytics();
   const revenue = Number(a.totals.revenue);
   const profit = Number(a.totals.profit);

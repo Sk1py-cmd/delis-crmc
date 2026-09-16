@@ -1,9 +1,11 @@
 import { getKnowledgeBase } from "@/server/queries";
 import { KnowledgeClient } from "./KnowledgeClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function KnowledgePage() {
+  await requireAccess("/knowledge");
   const rows = await getKnowledgeBase();
   return (
     <KnowledgeClient

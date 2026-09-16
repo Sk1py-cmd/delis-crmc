@@ -1,12 +1,13 @@
-import { getSessionUser } from "@/server/auth";
 import { getIntegrations } from "@/server/queries";
 import { pushConfigured, vapidPublicKey } from "@/server/webpush";
 import { SettingsClient } from "./SettingsClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [user, integrations] = await Promise.all([getSessionUser(), getIntegrations()]);
+  const user = await requireAccess("/settings");
+  const integrations = await getIntegrations();
   const tg = integrations.find((i) => i.key === "telegram_bot");
   const creds = tg?.credentials ?? {};
 

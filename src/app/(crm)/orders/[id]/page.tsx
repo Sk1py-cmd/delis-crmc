@@ -4,10 +4,12 @@ import Link from "next/link";
 import { Card, Badge, Avatar } from "@/shared/ui/kit";
 import { money, dt, statusMeta, ORDER_STATUSES, SOURCE_LABEL } from "@/shared/lib/format";
 import { OrderActions } from "./OrderActions";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAccess("/orders");
   const { id } = await params;
   const data = await getOrder(Number(id));
   if (!data) notFound();

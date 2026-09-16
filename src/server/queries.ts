@@ -1508,9 +1508,53 @@ export async function createPromocode(input: {
 }
 
 // ═══ ИНТЕГРАЦИИ ═══
+const INTEGRATION_CREDENTIAL_FIELDS: Record<
+  string,
+  { public: readonly string[]; secret: readonly string[] }
+> = {
+  telegram_bot: { public: [], secret: ["token"] },
+  click: { public: ["merchant_id", "service_id"], secret: ["secret_key"] },
+  payme: { public: ["merchant_id"], secret: ["key"] },
+  uzum: { public: ["merchant_id"], secret: ["api_key"] },
+  smtp: { public: ["host", "port", "user"], secret: ["password"] },
+  sms: { public: ["email", "sender"], secret: ["password"] },
+};
+
 export async function getIntegrations() {
   await init();
   return db.select().from(s.integrations).orderBy(s.integrations.id);
+}
+
+/**
+ * DTO для браузера: секретные значения никогда не покидают сервер.
+ * Клиент получает только список уже настроенных секретных полей, чтобы
+ * показать подсказку «оставьте пустым, чтобы не менять».
+ */
+export async function getIntegrationsForClient() {
+  const rows = await getIntegrations();
+
+  return rows.map((integration) => {
+    const spec = INTEGRATION_CREDENTIAL_FIELDS[integration.key] ?? {
+      public: [],
+      secret: [],
+    };
+    const stored = integration.credentials ?? {};
+    const credentials = Object.fromEntries(
+      spec.public.map((key) => [key, stored[key] ?? ""]),
+    );
+    const configuredSecrets = spec.secret.filter((key) => Boolean(stored[key]?.trim()));
+
+    return {
+      id: integration.id,
+      key: integration.key,
+      title: integration.title,
+      enabled: integration.enabled,
+      credentials,
+      configuredSecrets,
+      status: integration.status,
+      lastCheckAt: integration.lastCheckAt,
+    };
+  });
 }
 
 export async function saveIntegration(input: {
@@ -1519,13 +1563,38 @@ export async function saveIntegration(input: {
   enabled: boolean;
   actor: string;
 }) {
-  const hasCreds = Object.values(input.credentials).some((v) => v && v.trim().length > 0);
+  const spec = INTEGRATION_CREDENTIAL_FIELDS[input.key];
+  if (!spec) throw new BusinessError("Неизвестная интеграция");
+
+  const [existing] = await db
+    .select({ credentials: s.integrations.credentials })
+    .from(s.integrations)
+    .where(eq(s.integrations.key, input.key))
+    .limit(1);
+  if (!existing) throw new BusinessError("Интеграция не найдена");
+
+  // Не принятые схемой ключи игнорируются. Пустое секретное поле означает
+  // «оставить прежний секрет», а не стереть его и не вернуть в браузер.
+  const credentials: Record<string, string> = { ...(existing.credentials ?? {}) };
+  for (const key of spec.public) {
+    if (typeof input.credentials[key] === "string") {
+      credentials[key] = input.credentials[key].trim();
+    }
+  }
+  for (const key of spec.secret) {
+    const next = input.credentials[key]?.trim();
+    if (next) credentials[key] = next;
+  }
+
+  const required = [...spec.public, ...spec.secret];
+  const hasCreds = required.every((key) => Boolean(credentials[key]?.trim()));
+  const enabled = input.enabled && hasCreds;
   const [i] = await db
     .update(s.integrations)
     .set({
-      credentials: input.credentials,
-      enabled: input.enabled && hasCreds,
-      status: hasCreds ? "connected" : "not_configured",
+      credentials,
+      enabled,
+      status: enabled ? "connected" : "not_configured",
       lastCheckAt: new Date(),
       updatedAt: new Date(),
     })
@@ -1534,10 +1603,10 @@ export async function saveIntegration(input: {
 
   await db.insert(s.activity).values({
     actor: input.actor,
-    action: `${input.enabled ? "подключил" : "отключил"} интеграцию`,
+    action: `${enabled ? "подключил" : "отключил"} интеграцию`,
     entity: i?.title ?? input.key,
   });
-  await recordSyncEvent({ source: "crm", target: input.key, entity: "integration", action: "integration_updated", payload: { key: input.key, enabled: input.enabled } });
+  await recordSyncEvent({ source: "crm", target: input.key, entity: "integration", action: "integration_updated", payload: { key: input.key, enabled } });
   return i;
 }
 

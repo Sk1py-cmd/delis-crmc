@@ -1,9 +1,11 @@
 import { getTasks, getUsers } from "@/server/queries";
 import { TasksClient } from "./TasksClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function TasksPage() {
+  await requireAccess("/tasks");
   const [tasks, users] = await Promise.all([getTasks(), getUsers()]);
   return (
     <TasksClient

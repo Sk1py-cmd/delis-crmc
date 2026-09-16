@@ -1,11 +1,12 @@
 import { getBroadcastData } from "@/server/queries";
-import { getSessionUser } from "@/server/auth";
+import { requireAccess } from "@/server/guard";
 import { BroadcastClient } from "./BroadcastClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function BroadcastPage() {
-  const [data, session] = await Promise.all([getBroadcastData(), getSessionUser()]);
+  const session = await requireAccess("/broadcast");
+  const data = await getBroadcastData();
   return (
     <BroadcastClient
       operator={session?.name ?? "Менеджер"}

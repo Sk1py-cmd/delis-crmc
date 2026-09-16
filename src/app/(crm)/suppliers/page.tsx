@@ -1,9 +1,11 @@
 import { getProcurementData } from "@/server/queries";
 import { SuppliersClient } from "./SuppliersClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuppliersPage() {
+  await requireAccess("/suppliers");
   const data = await getProcurementData();
 
   return (

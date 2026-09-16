@@ -1,9 +1,11 @@
 import { getMarketingData } from "@/server/queries";
 import { MarketingClient } from "./MarketingClient";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketingPage() {
+  await requireAccess("/marketing");
   const data = await getMarketingData();
 
   return (

@@ -5,10 +5,12 @@ import { Card, Badge, Progress } from "@/shared/ui/kit";
 import { money, num, dt, statusMeta } from "@/shared/lib/format";
 import { ProductActions } from "./ProductActions";
 import { ProductGallery } from "@/shared/ui/ProductThumb";
+import { requireAccess } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAccess("/products");
   const { id } = await params;
   const data = await getProduct(Number(id));
   if (!data) notFound();
