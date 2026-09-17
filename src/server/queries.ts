@@ -1512,13 +1512,22 @@ const INTEGRATION_CREDENTIAL_FIELDS: Record<
   string,
   { public: readonly string[]; secret: readonly string[] }
 > = {
-  telegram_bot: { public: [], secret: ["token"] },
+  // Telegram token хранится только в TELEGRAM_BOT_TOKEN на сервере.
+  telegram_bot: { public: [], secret: [] },
   click: { public: ["merchant_id", "service_id"], secret: ["secret_key"] },
   payme: { public: ["merchant_id"], secret: ["key"] },
   uzum: { public: ["merchant_id"], secret: ["api_key"] },
   smtp: { public: ["host", "port", "user"], secret: ["password"] },
   sms: { public: ["email", "sender"], secret: ["password"] },
 };
+
+function telegramBotToken() {
+  return process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
+}
+
+export function telegramBotConfigured() {
+  return Boolean(telegramBotToken());
+}
 
 export async function getIntegrations() {
   await init();
@@ -1544,11 +1553,15 @@ export async function getIntegrationsForClient() {
     );
     const configuredSecrets = spec.secret.filter((key) => Boolean(stored[key]?.trim()));
 
+    const enabled = integration.key === "telegram_bot"
+      ? integration.enabled && telegramBotConfigured()
+      : integration.enabled;
+
     return {
       id: integration.id,
       key: integration.key,
       title: integration.title,
-      enabled: integration.enabled,
+      enabled,
       credentials,
       configuredSecrets,
       status: integration.status,
@@ -1565,6 +1578,9 @@ export async function saveIntegration(input: {
 }) {
   const spec = INTEGRATION_CREDENTIAL_FIELDS[input.key];
   if (!spec) throw new BusinessError("Неизвестная интеграция");
+  if (input.key === "telegram_bot" && input.enabled && !telegramBotConfigured()) {
+    throw new BusinessError("TELEGRAM_BOT_TOKEN не настроен на сервере");
+  }
 
   const [existing] = await db
     .select({ credentials: s.integrations.credentials })
@@ -1576,6 +1592,7 @@ export async function saveIntegration(input: {
   // Не принятые схемой ключи игнорируются. Пустое секретное поле означает
   // «оставить прежний секрет», а не стереть его и не вернуть в браузер.
   const credentials: Record<string, string> = { ...(existing.credentials ?? {}) };
+  if (input.key === "telegram_bot") delete credentials.token;
   for (const key of spec.public) {
     if (typeof input.credentials[key] === "string") {
       credentials[key] = input.credentials[key].trim();
@@ -1610,10 +1627,11 @@ export async function saveIntegration(input: {
   return i;
 }
 
-export async function testTelegramBot(token: string) {
-  if (!token.trim()) return { ok: false, error: "Токен пустой" };
+export async function testTelegramBot() {
+  const token = telegramBotToken();
+  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN не настроен на сервере" };
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token.trim()}/getMe`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, { signal: AbortSignal.timeout(8000) });
     const data = (await res.json()) as { ok?: boolean; result?: { username?: string; first_name?: string }; description?: string };
     if (data.ok && data.result) {
       return { ok: true, username: data.result.username ?? "", name: data.result.first_name ?? "" };
@@ -1626,8 +1644,9 @@ export async function testTelegramBot(token: string) {
 
 export async function sendTelegramMessage(chatId: string, text: string) {
   const [tg] = await db.select().from(s.integrations).where(eq(s.integrations.key, "telegram_bot"));
-  const token = tg?.credentials?.token;
-  if (!tg?.enabled || !token) return { ok: false, error: "Telegram Bot не подключён в настройках" };
+  const token = telegramBotToken();
+  if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN не настроен на сервере" };
+  if (!tg?.enabled) return { ok: false, error: "Telegram Bot не включён в настройках" };
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
@@ -1731,23 +1750,11 @@ async function notifyOwnerAboutOrder(orderNumber: string, total: string, payment
   if (!chatId) chatId = tg?.credentials?.ownerChatId;
   if (!chatId) return; // Telegram не настроен — молча пропускаем
 
-  const token = tg?.credentials?.token;
-  if (!token) return;
-
   const paymentNames: Record<string, string> = { cash: "💵 Наличные", click: "🔵 Click", payme: "🟢 Payme", uzum: "🟣 Uzum", bank: "🏦 Банк", crm: "💻 CRM" };
 
   const text = `🔔 <b>Новый заказ ${orderNumber}</b>\n\n💰 Сумма: ${Number(total).toLocaleString("ru-RU")} сум\n💳 Оплата: ${paymentNames[payment] ?? payment}\n📦 Товар: ${productName}\n\n<a href="https://delis.uz/orders">Открыть в CRM</a>`;
 
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    /* ignore notification errors */
-  }
+  await sendTelegramMessage(chatId, text);
 }
 export async function getKnowledgeBase() {
   await init();
