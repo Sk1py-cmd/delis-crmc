@@ -1642,6 +1642,26 @@ export async function sendTelegramMessage(chatId: string, text: string) {
   }
 }
 
+/** Отправляет сообщение владельцу через уже настроенного в CRM бота. */
+export async function sendOwnerTelegramMessage(text: string) {
+  const [tg] = await db.select().from(s.integrations).where(eq(s.integrations.key, "telegram_bot")).limit(1);
+  const [config] = await db.select().from(s.contentBlocks)
+    .where(and(eq(s.contentBlocks.surface, "telegram"), eq(s.contentBlocks.key, "notifications")))
+    .limit(1);
+
+  let chatId = tg?.credentials?.ownerChatId;
+  if (config?.body) {
+    try {
+      const parsed = JSON.parse(config.body) as { ownerChatId?: unknown };
+      if (typeof parsed.ownerChatId === "string" && parsed.ownerChatId.trim()) chatId = parsed.ownerChatId.trim();
+    } catch {
+      // Повреждённая устаревшая настройка не должна обрушать endpoint.
+    }
+  }
+  if (!chatId) return { ok: false, error: "Chat ID владельца не настроен" };
+  return sendTelegramMessage(chatId, text);
+}
+
 // ═══ ПУБЛИКАЦИЯ КОНТЕНТА ═══
 export async function publishSurface(target: string, actor: string) {
   await db.update(s.contentBlocks).set({ enabled: true, updatedAt: new Date() }).where(eq(s.contentBlocks.surface, target === "miniapp" ? "miniapp" : "site"));
