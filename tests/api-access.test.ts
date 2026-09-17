@@ -101,6 +101,15 @@ describe("матрица ролей закрывает найденные дыр
 });
 
 describe("сквозные каналы к закрытым данным", () => {
+  it("endpoint Telegram-отчёта принимает только подписанный GitHub OIDC", () => {
+    const src = routeSource("security-report/route.ts");
+    const handler = src.slice(src.indexOf("export async function POST"));
+
+    expect(handler).toContain("verifySecurityWorkflowToken");
+    expect(handler).toContain('authorization.startsWith("Bearer ")');
+    expect(handler.indexOf("verifySecurityWorkflowToken")).toBeLessThan(handler.indexOf("sendOwnerTelegramMessage"));
+  });
+
   it("печатные формы требуют доступ к заказам", () => {
     // Счета, накладные и акты сверки содержат суммы, долг и контакты
     // клиента. Раньше layout проверял только вход, и кладовщик открывал

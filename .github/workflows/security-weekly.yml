@@ -1,0 +1,59 @@
+name: Еженедельная безопасность → Telegram
+
+on:
+  schedule:
+    # 08:00 Asia/Tashkent (UTC+5), каждый понедельник.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/security-weekly.yml"
+      - "scripts/security-report.mjs"
+      - "src/app/api/security-report/**"
+      - "src/server/github-oidc.ts"
+      - "src/server/security-report.ts"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: weekly-security-report
+  cancel-in-progress: false
+
+jobs:
+  security:
+    name: Проверка и отчёт в Telegram
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db
+      PRODUCTION_URL: https://delis-crmc-beta.vercel.app
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Проверить проект и отправить отчёт
+        run: node scripts/security-report.mjs
