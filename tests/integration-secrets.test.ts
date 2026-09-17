@@ -39,4 +39,19 @@ describe("секреты интеграций", () => {
     expect(save).toMatch(/if \(next\) credentials\[key\] = next/);
     expect(save).toContain("existing.credentials");
   });
+
+  it("Telegram-токен берётся только из env и не вводится в CRM", async () => {
+    const [queries, settings, manage] = await Promise.all([
+      readFile(path.join(process.cwd(), "src/server/queries.ts"), "utf8"),
+      readFile(path.join(process.cwd(), "src/app/(crm)/settings/SettingsClient.tsx"), "utf8"),
+      readFile(path.join(process.cwd(), "src/app/api/manage/route.ts"), "utf8"),
+    ]);
+
+    expect(queries).toContain("process.env.TELEGRAM_BOT_TOKEN");
+    expect(queries).not.toMatch(/const token = tg\?\.credentials\?\.token/);
+    expect(settings).not.toContain("tgToken");
+    expect(settings).not.toContain("AAExxxxx");
+    expect(manage).not.toMatch(/str\(d\.token\)/);
+    expect(manage).toContain("delete credentials.token");
+  });
 });

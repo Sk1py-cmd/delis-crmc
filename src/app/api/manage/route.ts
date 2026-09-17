@@ -396,16 +396,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, id: i?.id, status: i?.status });
       }
       case "testTelegram": {
-        let token = str(d.token).trim();
-        if (!token) {
-          const [current] = await db
-            .select({ credentials: s.integrations.credentials })
-            .from(s.integrations)
-            .where(eq(s.integrations.key, "telegram_bot"))
-            .limit(1);
-          token = current?.credentials?.token ?? "";
-        }
-        const res = await testTelegramBot(token);
+        const res = await testTelegramBot();
         if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
         return NextResponse.json({ ok: true, username: res.username, name: res.name });
       }
@@ -417,11 +408,15 @@ export async function POST(req: NextRequest) {
       case "setupOrderNotifications": {
         const chatId = str(d.chatId);
         const existingCreds = (await db.select().from(s.integrations).where(eq(s.integrations.key, "telegram_bot")).limit(1))[0]?.credentials ?? {};
-        const token = str(d.token) || existingCreds.token || "";
-        if (!chatId || !token) return NextResponse.json({ error: "Укажите Chat ID и токен бота" }, { status: 400 });
+        if (!chatId) return NextResponse.json({ error: "Укажите Chat ID" }, { status: 400 });
+        const bot = await testTelegramBot();
+        if (!bot.ok) return NextResponse.json({ error: bot.error }, { status: 400 });
+        // Удаляем старый токен из БД: секрет теперь живёт только в env сервера.
+        const credentials = { ...existingCreds };
+        delete credentials.token;
         // Сохраняем в интеграции
         await db.update(s.integrations).set({
-          credentials: { ...existingCreds, token, ownerChatId: chatId },
+          credentials: { ...credentials, ownerChatId: chatId },
           enabled: true,
           status: "connected",
           lastCheckAt: new Date(),
@@ -519,17 +514,9 @@ export async function POST(req: NextRequest) {
           try { chatId = JSON.parse(cfg.body).ownerChatId; } catch { /* */ }
         }
         if (!chatId) chatId = tg?.credentials?.ownerChatId;
-        const token = tg?.credentials?.token;
-        if (chatId && token) {
-          try {
-            const text = `<b>🔔 ${title}</b>\n\n${body}`;
-            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
-              signal: AbortSignal.timeout(5000),
-            });
-          } catch { /* */ }
+        if (chatId) {
+          const text = `<b>🔔 ${title}</b>\n\n${body}`;
+          await sendTelegramMessage(chatId, text);
         }
         await db.insert(s.activity).values({ actor: user.name, action: `push: ${event}`, entity: title });
         return NextResponse.json({ ok: true });

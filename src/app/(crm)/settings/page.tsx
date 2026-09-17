@@ -1,4 +1,4 @@
-import { getIntegrations } from "@/server/queries";
+import { getIntegrations, telegramBotConfigured } from "@/server/queries";
 import { pushConfigured, vapidPublicKey } from "@/server/webpush";
 import { SettingsClient } from "./SettingsClient";
 import { requireAccess } from "@/server/guard";
@@ -21,7 +21,7 @@ export default async function SettingsPage() {
       }}
       telegram={{
         enabled: Boolean(tg?.enabled && creds.ownerChatId),
-        tokenSet: Boolean(creds.token),
+        serverConfigured: telegramBotConfigured(),
         chatId: creds.ownerChatId ?? "",
       }}
       push={{

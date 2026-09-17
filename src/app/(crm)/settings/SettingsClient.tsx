@@ -40,7 +40,7 @@ export interface SettingsUser {
 
 export interface TelegramState {
   enabled: boolean;
-  tokenSet: boolean;
+  serverConfigured: boolean;
   chatId: string;
 }
 
@@ -65,8 +65,6 @@ export function SettingsClient({ user, telegram, push }: { user: SettingsUser; t
   const [newLogin, setNewLogin] = useState(user.login);
 
   const [tgChatId, setTgChatId] = useState(telegram.chatId);
-  const [tgToken, setTgToken] = useState("");
-  const [editToken, setEditToken] = useState(!telegram.tokenSet);
   const [tgTestResult, setTgTestResult] = useState<string | null>(null);
 
   const [pushSupported, setPushSupported] = useState(false);
@@ -107,11 +105,10 @@ export function SettingsClient({ user, telegram, push }: { user: SettingsUser; t
   };
 
   const testTelegram = async () => {
-    if (!tgToken.trim()) { toast(tt("settings.tgTokenEmpty"), "err"); return; }
     setBusy(true);
     setTgTestResult(null);
     try {
-      const res = await postManage("testTelegram", { token: tgToken.trim() });
+      const res = await postManage("testTelegram", {});
       const r = res as { username?: string; name?: string };
       setTgTestResult(`✅ ${tt("settings.tgBotFound").replace("{username}", r.username ?? "").replace("{name}", r.name ?? "")}`);
     } catch (e) {
@@ -122,13 +119,10 @@ export function SettingsClient({ user, telegram, push }: { user: SettingsUser; t
 
   const saveTgNotifications = async () => {
     if (!tgChatId.trim()) { toast(tt("settings.tgChatIdEmpty"), "err"); return; }
-    if (!telegram.tokenSet && !tgToken.trim()) { toast(tt("settings.tgTokenRequired"), "err"); return; }
     setBusy(true);
     try {
-      await postManage("setupOrderNotifications", { chatId: tgChatId.trim(), token: tgToken.trim() });
+      await postManage("setupOrderNotifications", { chatId: tgChatId.trim() });
       toast(tt("settings.tgConnectedToast"));
-      setTgToken("");
-      setEditToken(false);
       router.refresh();
     } catch (e) {
       toast(e instanceof Error ? e.message : tt("common.error"), "err");
@@ -282,38 +276,29 @@ export function SettingsClient({ user, telegram, push }: { user: SettingsUser; t
           )}
 
           <div className="flex flex-col gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs muted uppercase tracking-wider">{tt("settings.botToken")}</label>
-                {telegram.tokenSet && !editToken && (
-                  <button className="text-xs font-semibold" style={{ color: "var(--primary)" }} onClick={() => setEditToken(true)}>
-                    {tt("settings.changeLogin")}
-                  </button>
-                )}
-              </div>
-              {telegram.tokenSet && !editToken ? (
-                <div className="input flex items-center gap-2 text-sm">
-                  <CheckCircle2 size={14} color="#22c55e" /> {tt("settings.tokenSaved")}
-                </div>
-              ) : (
-                <input className="input font-mono text-sm" placeholder="1234567890:AAExxxxxxxx" value={tgToken} onChange={(e) => setTgToken(e.target.value)} />
-              )}
-              <p className="text-[0.65rem] muted mt-1">{tt("settings.tokenHint")}</p>
+            <div className="rounded-2xl p-3 flex items-center gap-2" style={{
+              background: telegram.serverConfigured
+                ? "color-mix(in srgb, #22c55e 12%, transparent)"
+                : "color-mix(in srgb, #f97316 12%, transparent)",
+              border: `1px solid color-mix(in srgb, ${telegram.serverConfigured ? "#22c55e" : "#f97316"} 32%, transparent)`,
+            }}>
+              {telegram.serverConfigured
+                ? <CheckCircle2 size={15} color="#22c55e" />
+                : <KeyRound size={15} color="#f97316" />}
+              <span className="text-xs">
+                {tt(telegram.serverConfigured ? "settings.serverBotReady" : "settings.serverBotMissing")}
+              </span>
             </div>
 
-            {(editToken || !telegram.tokenSet) && (
-              <>
-                <button className="btn justify-center" disabled={busy || !tgToken.trim()} onClick={testTelegram}>
-                  <Smartphone size={14} /> {busy ? tt("settings.testing") : tt("settings.testBot")}
-                </button>
-                {tgTestResult && (
-                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className="rounded-2xl p-2.5 text-xs"
-                    style={{ background: tgTestResult.startsWith("✅") ? "color-mix(in srgb, #22c55e 12%, transparent)" : "color-mix(in srgb, #ef4444 12%, transparent)" }}>
-                    {tgTestResult}
-                  </motion.div>
-                )}
-              </>
+            <button className="btn justify-center" disabled={busy || !telegram.serverConfigured} onClick={testTelegram}>
+              <Smartphone size={14} /> {busy ? tt("settings.testing") : tt("settings.testBot")}
+            </button>
+            {tgTestResult && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl p-2.5 text-xs"
+                style={{ background: tgTestResult.startsWith("✅") ? "color-mix(in srgb, #22c55e 12%, transparent)" : "color-mix(in srgb, #ef4444 12%, transparent)" }}>
+                {tgTestResult}
+              </motion.div>
             )}
 
             <div>
@@ -322,7 +307,7 @@ export function SettingsClient({ user, telegram, push }: { user: SettingsUser; t
               <p className="text-[0.65rem] muted mt-1">{tt("settings.chatIdHint")}</p>
             </div>
 
-            <button className="btn btn-primary justify-center" disabled={busy} onClick={saveTgNotifications}>
+            <button className="btn btn-primary justify-center" disabled={busy || !telegram.serverConfigured} onClick={saveTgNotifications}>
               <Send size={14} /> {busy ? tt("settings.connecting") : telegram.enabled ? tt("settings.updateNotif") : tt("settings.connectNotif")}
             </button>
           </div>

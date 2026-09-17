@@ -20,8 +20,8 @@ const CONFIG: Record<string, { icon: typeof Bot; color: string; desc: string; fi
   telegram_bot: {
     icon: Bot, color: "#0ea5e9",
     desc: "Отправка статусов заказов, чеков и уведомлений клиентам в Telegram",
-    fields: [{ key: "token", label: "Bot Token", placeholder: "1234567890:AAExxxxxxxxxxxxxxxxxxxxxx", secret: true }],
-    help: "Откройте @BotFather → /newbot → скопируйте токен",
+    fields: [],
+    help: "Токен безопасно хранится на сервере. Здесь его вводить не нужно.",
   },
   click: {
     icon: CreditCard, color: "#3b82f6",
@@ -112,7 +112,7 @@ export function IntegrationsClient({ integrations, role }: { integrations: Integ
     setBusy(true);
     setTestResult(null);
     try {
-      const res = await postManage("testTelegram", { token: form.token ?? "" });
+      const res = await postManage("testTelegram", {});
       const r = res as { username?: string; name?: string };
       setTestResult(`✅ Бот найден: @${r.username} (${r.name})`);
       toast("Соединение с Telegram успешно!");
